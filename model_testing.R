@@ -36,6 +36,7 @@ x_test <- df_clean[testID,4]
 y_train <- df_clean[trainID,2]
 y_test <- df_clean[testID,2]
 
+unique(df_clean$STUD_NO_ANONYMOUS)
 
 library(xgboost)
 
