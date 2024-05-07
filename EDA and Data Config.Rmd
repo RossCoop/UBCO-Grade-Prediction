@@ -6,9 +6,9 @@ output: html_document
 ---
 
 ```{r}
-df <- read.csv(".\\data\\student-data.csv")
+df <- read.csv("..\\UBCO-Grade-Prediction-data\\student-data.csv")
 #df <- df[df$DEGR_PGM_CD == "BSC-O ",]
-df_clean <- df[,c(1,3,4,5,12,13,15,16,17)]
+df_clean <- df[,c(1,2,3,4,5,12,13,15,16,17)]
 #df_clean <- na.omit(df_clean)
 # Do some cleaning on chr columns
 df_clean$STUD_NO_ANONYMOUS <- trimws(df_clean$STUD_NO_ANONYMOUS)
@@ -23,22 +23,33 @@ df_clean$HDR_CRS_LTTR_GRD <-
 
 # Create course code column
 df_clean$COURSE_CODE <- paste(df_clean$CRS_DPT_CD, df_clean$CRS_NO, sep = ".")
-df_clean <- df_clean[,-(5:6)]
+df_clean <- df_clean[,-(6:7)]
 df <- subset(df, HDR_CRS_PCT_GRD < 999)
 df_clean <- subset(df_clean, HDR_CRS_PCT_GRD < 999)
 
 # Removing 2023 grades (not included)
 df <- subset(df, SEC_SES_YR < 2022.5)
 df_clean <- subset(df_clean, SEC_SES_YR < 2022.5)
-
 df_clean
+```
 
+```{r}
+
+unique(df_clean$COURSE_CODE)|>length()
+courses_taken_bsc <- table(df_clean$COURSE_CODE)
+barplot(sorted_courses_taken_bsc)
+
+sorted_courses_taken_bsc <- sort(courses_taken_bsc, decreasing = TRUE)#[1:500]
+
+sorted_courses_taken_bsc["STAT.303"]
 ```
 
 ```{r}
 # checking individual student ids
 df_clean[df_clean$STUD_NO_ANONYMOUS=="18AAED88A88707993EE1AF22933D1CE3",]
 
+df_bsc <- df_clean[df_clean$DEGR_PGM_CD=="BSC-O ",]
+nrow(df_clean)
 ```
 
 ```{r}
@@ -58,7 +69,7 @@ uniqueids <- unique(df_clean$STUD_NO_ANONYMOUS)
 # finding average year
 for(uniqueidf in df_clean$STUD_NO_ANONYMOUS) {
   if(uniqueids[uniqueids] == "470D1AA1C0CD8D85EA8762C8CCF4B85D"){
-    print("hi")
+    
   }
 }
 
