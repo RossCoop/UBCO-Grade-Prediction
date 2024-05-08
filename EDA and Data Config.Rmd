@@ -8,12 +8,22 @@ output: html_document
 ```{r}
 df <- read.csv("..\\UBCO-Grade-Prediction-data\\student-data.csv")
 #df <- df[df$DEGR_PGM_CD == "BSC-O ",]
-df_clean <- df[,c(1,2,3,4,5,12,13,15,16,17)]
+df_clean <- df[,c(1,2,3,4,5,6,7,8,9,10,11,12,13,15,16,17)]
 #df_clean <- na.omit(df_clean)
 # Do some cleaning on chr columns
 df_clean$STUD_NO_ANONYMOUS <- trimws(df_clean$STUD_NO_ANONYMOUS)
 df_clean$CRS_DPT_CD <- trimws(df_clean$CRS_DPT_CD)
 df_clean$HDR_CRS_LTTR_GRD <- trimws(df_clean$HDR_CRS_LTTR_GRD)
+df_clean$CURR_SPEC_PRIM_PGM_TYPE_1 <- trimws(df_clean$CURR_SPEC_PRIM_PGM_TYPE_1)
+df_clean$CURR_SPEC_PRIM_SUBJECT_1 <- trimws(df_clean$CURR_SPEC_PRIM_SUBJECT_1)
+df_clean$CURR_SPEC_PRIM_PGM_TYPE_2 <- trimws(df_clean$CURR_SPEC_PRIM_PGM_TYPE_2)
+df_clean$CURR_SPEC_PRIM_SUBJECT_2 <- trimws(df_clean$CURR_SPEC_PRIM_SUBJECT_2)
+df_clean$CURR_SPEC_SECN_PGM_TYPE_1 <- trimws(df_clean$CURR_SPEC_SECN_PGM_TYPE_1)
+df_clean$CURR_SPEC_SECN_SUBJECT_1 <- trimws(df_clean$CURR_SPEC_SECN_SUBJECT_1)
+df_clean$CURR_SPEC_SECN_PGM_TYPE_2 <- trimws(df_clean$CURR_SPEC_SECN_PGM_TYPE_2)
+df_clean$CURR_SPEC_SECN_SUBJECT_2 <- trimws(df_clean$CURR_SPEC_SECN_SUBJECT_2)
+df_clean$DEGR_PGM_CD <- trimws(df_clean$DEGR_PGM_CD)
+
 
 # Factor grades column
 grades <-
@@ -23,33 +33,45 @@ df_clean$HDR_CRS_LTTR_GRD <-
 
 # Create course code column
 df_clean$COURSE_CODE <- paste(df_clean$CRS_DPT_CD, df_clean$CRS_NO, sep = ".")
-df_clean <- df_clean[,-(6:7)]
+df_clean <- df_clean[,-(12:13)]
 df <- subset(df, HDR_CRS_PCT_GRD < 999)
 df_clean <- subset(df_clean, HDR_CRS_PCT_GRD < 999)
 
 # Removing 2023 grades (not included)
 df <- subset(df, SEC_SES_YR < 2022.5)
 df_clean <- subset(df_clean, SEC_SES_YR < 2022.5)
+
+# Subsetting only BSc students
+df_bsc <- df_clean[df_clean$DEGR_PGM_CD=="BSC-O",]
+
 df_clean
 ```
 
 ```{r}
-
+# Determining how many bsc students took each course
 unique(df_clean$COURSE_CODE)|>length()
-courses_taken_bsc <- table(df_clean$COURSE_CODE)
+courses_taken_bsc <- table(df_bsc$COURSE_CODE)
 barplot(sorted_courses_taken_bsc)
 
-sorted_courses_taken_bsc <- sort(courses_taken_bsc, decreasing = TRUE)#[1:500]
+sorted_courses_taken_bsc <- sort(courses_taken_bsc, decreasing = TRUE)[1:200]#[1:450]
 
-sorted_courses_taken_bsc["STAT.303"]
+# saving course names
+course_names <- dimnames(sorted_courses_taken_bsc)[[1]]
 ```
+
+```{r}
+# Subsetting on only courses which are taken the most times ("relevant courses")
+df_bsc <- df_bsc[df_bsc$COURSE_CODE %in% course_names, ]
+length(unique(df_bsc$STUD_NO_ANONYMOUS))
+length(uniqueids)
+```
+
 
 ```{r}
 # checking individual student ids
 df_clean[df_clean$STUD_NO_ANONYMOUS=="18AAED88A88707993EE1AF22933D1CE3",]
 
-df_bsc <- df_clean[df_clean$DEGR_PGM_CD=="BSC-O ",]
-nrow(df_clean)
+
 ```
 
 ```{r}
@@ -58,21 +80,100 @@ nrow(df_clean)
 # need to make the student df (sticky notes)
 
 # list of all unique student IDs
-uniqueids <- unique(df_clean$STUD_NO_ANONYMOUS)
+uniqueids <- unique(df_bsc$STUD_NO_ANONYMOUS)
 
 # looping through to find major(s)
+unique(df_bsc$CURR_SPEC_PRIM_PGM_TYPE_1)
+unique(df_bsc$CURR_SPEC_PRIM_SUBJECT_1)
+unique(df_bsc$CURR_SPEC_PRIM_PGM_TYPE_2)
+unique(df_bsc$CURR_SPEC_PRIM_SUBJECT_2)
+unique(df_bsc$CURR_SPEC_SECN_PGM_TYPE_1)
+unique(df_bsc$CURR_SPEC_SECN_SUBJECT_1)
+unique(df_bsc$CURR_SPEC_SECN_PGM_TYPE_2)
+unique(df_bsc$CURR_SPEC_SECN_SUBJECT_2)
 
+subset(df_bsc, CURR_SPEC_PRIM_PGM_TYPE_1 !="" & CURR_SPEC_PRIM_PGM_TYPE_2 !="" & CURR_SPEC_SECN_PGM_TYPE_1 !="" & CURR_SPEC_SECN_PGM_TYPE_2 !="")
 # looping through to find minor(s)
 
-# finding average grade
 
-# finding average year
-for(uniqueidf in df_clean$STUD_NO_ANONYMOUS) {
-  if(uniqueids[uniqueids] == "470D1AA1C0CD8D85EA8762C8CCF4B85D"){
-    
+
+
+
+# all students who only "did" 1st year and have avg of less than 30%
+firstdrops <- c()
+for(id in uniqueids){
+  dat <- subset(df_bsc, STUD_NO_ANONYMOUS==id)
+  if((mean(dat$CURR_YEAR_LEVEL) == 1) & (mean(dat$HDR_CRS_PCT_GRD) <= 30)){
+    firstdrops <- append(firstdrops,id)
+  }
+}
+firstdrops
+
+
+subset(df_bsc, STUD_NO_ANONYMOUS=="A9DB35467FB793FFB63E410782268465")
+
+#df_clean
+```
+
+
+```{r}
+# Removing all students who dropped out horribly
+
+```
+
+```{r}
+# finding student who've taken a course more than once
+duplicate_rows <- df_bsc[df_bsc(df_bsc_relevant_courses[c("STUD_NO_ANONYMOUS", "COURSE_CODE")]) | duplicated(df_bsc[c("STUD_NO_ANONYMOUS", "COURSE_CODE")], fromLast = TRUE), ]
+duplicate_rows[c(1,15,12,13)]
+
+# Count occurrences of each course for each student
+course_counts <- table(duplicate_rows$STUD_NO_ANONYMOUS, duplicate_rows$COURSE_CODE)
+
+# Find the maximum number of times each course was taken by any student
+max_repeats <- apply(course_counts, 2, max)
+
+# Combine course names with corresponding maximum counts
+max_course_counts_df <- data.frame(COURSE_CODE = names(max_repeats), max_repeats)
+sum(max_course_counts_df$max_repeats)
+```
+
+```{r}
+# Creating a new list of course column names
+## eg. Math.101.1, Math.101.2...
+
+## want a list of course names with the .1 .2 .3
+# groups: Non-Repeats, Repeats
+# Non-repeats
+non_rep_courses <- setdiff(course_names,max_course_counts_df$COURSE_CODE)
+
+# Repeats
+# Modify course names for repeated courses
+rep_courses <- c()
+for (i in 1:nrow(max_course_counts_df)) {
+  for (j in 1:max_course_counts_df[i,2]) {
+    rep_courses <- append(rep_courses, paste0(max_course_counts_df[i,1], ".", j))
   }
 }
 
-df_clean
+course_names_dups <- append(non_rep_courses, rep_courses)
 ```
+
+
+```{r}
+# Making the Data Frame
+ ## Columns to add: Student ID, Major, Honors, Minor, Extras, 200 most common courses
+
+# Building df after getting the data
+studentgrades <- data.frame(Student_ID = uniqueids)
+
+# Create a data frame with NA values and course column names
+new_columns <- data.frame(matrix(NA, nrow = nrow(studentgrades), ncol = length(course_names_dups)))
+colnames(new_columns) <- course_names_dups
+
+# Add course name columns to existing data frame
+studentgrades <- cbind(studentgrades, new_columns)
+
+#df_bsc
+```
+
 
