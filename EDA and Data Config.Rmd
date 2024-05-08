@@ -123,7 +123,7 @@ subset(df_bsc, STUD_NO_ANONYMOUS=="A9DB35467FB793FFB63E410782268465")
 
 ```{r}
 # finding student who've taken a course more than once
-duplicate_rows <- df_bsc[df_bsc(df_bsc_relevant_courses[c("STUD_NO_ANONYMOUS", "COURSE_CODE")]) | duplicated(df_bsc[c("STUD_NO_ANONYMOUS", "COURSE_CODE")], fromLast = TRUE), ]
+duplicate_rows <- df_bsc[df_bsc(df_bsc[c("STUD_NO_ANONYMOUS", "COURSE_CODE")]) | duplicated(df_bsc[c("STUD_NO_ANONYMOUS", "COURSE_CODE")], fromLast = TRUE), ]
 duplicate_rows[c(1,15,12,13)]
 
 # Count occurrences of each course for each student
@@ -173,7 +173,31 @@ colnames(new_columns) <- course_names_dups
 # Add course name columns to existing data frame
 studentgrades <- cbind(studentgrades, new_columns)
 
-#df_bsc
+
+# Saving student grades into df
+for (i in 1:nrow(df_bsc)){
+  rep <- 0
+  # finding the index of course name .1
+  coursecol <- grep(df_bsc[i,]$COURSE_CODE, colnames(studentgrades))[1]
+  
+  # Moving over from .1 to .2 columns if a grade already exists
+  while(!is.na(studentgrades[studentgrades$Student_ID==df_bsc[i,]$STUD_NO_ANONYMOUS,coursecol+rep])){
+    rep = rep+1
+  }
+  
+  # Saving student grade into studentgrades df
+  studentgrades[studentgrades$Student_ID==df_bsc[i,]$STUD_NO_ANONYMOUS,coursecol+rep] <- df_bsc[i,]$HDR_CRS_PCT_GRD
+}
+
+studentgrades
+
 ```
+
+```{r}
+studentgrades[studentgrades$Student_ID=="61DA78B68FA49F369B99DF05D981B54D",]
+
+
+```
+
 
 
