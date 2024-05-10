@@ -61,12 +61,14 @@ course_names <- dimnames(sorted_courses_taken_bsc)[[1]]
 # Subsetting on only courses which are taken the most times ("relevant courses")
 df_bsc_relevant_courses <- df_bsc[df_bsc$COURSE_CODE %in% course_names, ]
 
+# Getting a list of all student ids which took relevant courses
+uniqueids <- unique(df_bsc_relevant_courses$STUD_NO_ANONYMOUS)
 ```
 
 ```{r}
 # Subsetting on only courses which are taken the most times ("relevant courses")
 df_bsc <- df_bsc[df_bsc$COURSE_CODE %in% course_names, ]
-length(unique(df_bsc$STUD_NO_ANONYMOUS))
+length(unique(df_bsc_relevant_courses$STUD_NO_ANONYMOUS))
 length(uniqueids)
 ```
 
@@ -162,6 +164,7 @@ for (i in 1:nrow(max_course_counts_df)) {
 course_names_dups <- append(non_rep_courses, rep_courses)
 ```
 
+
 ```{r}
 # Finding student majors and minors
 ### WARNING: no 2023 data yet which may contain updates to major/minors
@@ -173,12 +176,66 @@ library(dplyr)
 # Assuming your dataframe is called 'df'
 
 # Group by student_id and get the last row of each group
-last_rows <- df_bsc %>%
+last_rows <- df_bsc_relevant_courses %>%
   group_by(STUD_NO_ANONYMOUS) %>%
   slice(n())
 
 # Print the result
 last_rows
+
+
+
+
+# Create a data frame with NA values and course column names
+new_columns <- data.frame(matrix(NA, nrow = nrow(last_rows), ncol = 4))
+colnames(new_columns) <- c("Major.1", "Major.2", "Minor", "Honors")
+
+# Add course name columns to existing data frame
+student_mm <- cbind(last_rows[,1], new_columns)
+student_mm$Honors <- FALSE
+
+for(i in 1:nrow(last_rows)){
+  # If MAJ is in column 1, major.1 is that subject
+  if(last_rows[i,]$CURR_SPEC_PRIM_PGM_TYPE_1=="MAJ"){
+    student_mm[i,]$Major.1 <- last_rows[i,]$CURR_SPEC_PRIM_SUBJECT_1
+  }
+  
+  # if MAJ is in col 2, check if major.1 is occupied and place it in maj.1 or maj.2
+  if(last_rows[i,]$CURR_SPEC_PRIM_PGM_TYPE_2=="MAJ" & is.na(student_mm[i,]$Major.1)){
+    student_mm[i,]$Major.1 <- last_rows[i,]$CURR_SPEC_PRIM_SUBJECT_2
+  } else if (last_rows[i,]$CURR_SPEC_PRIM_PGM_TYPE_2=="MAJ"){
+    student_mm[i,]$Major.2 <- last_rows[i,]$CURR_SPEC_PRIM_SUBJECT_2
+  }
+  
+  # combined majors....
+  
+  # finding that minor
+  if(last_rows[i,]$CURR_SPEC_PRIM_PGM_TYPE_1=="MIN"){
+    student_mm[i,]$Minor <- last_rows[i,]$CURR_SPEC_PRIM_SUBJECT_1
+  } else if (last_rows[i,]$CURR_SPEC_PRIM_PGM_TYPE_2=="MIN"){
+    student_mm[i,]$Minor <- last_rows[i,]$CURR_SPEC_PRIM_SUBJECT_2
+  }
+  
+  # adding Honors as majors
+  if(last_rows[i,]$CURR_SPEC_PRIM_PGM_TYPE_1=="HON" & is.na(student_mm[i,]$Major.1)){
+    student_mm[i,]$Major.1 <- last_rows[i,]$CURR_SPEC_PRIM_SUBJECT_1
+    student_mm[i,]$Honors <- TRUE
+  } else if (last_rows[i,]$CURR_SPEC_PRIM_PGM_TYPE_1=="HON" & is.na(student_mm[i,]$Major.2)){
+    student_mm[i,]$Major.2 <- last_rows[i,]$CURR_SPEC_PRIM_SUBJECT_1
+    student_mm[i,]$Honors <- TRUE
+  }
+  if(last_rows[i,]$CURR_SPEC_PRIM_PGM_TYPE_2=="HON" & is.na(student_mm[i,]$Major.1)){
+    student_mm[i,]$Major.1 <- last_rows[i,]$CURR_SPEC_PRIM_SUBJECT_2
+    student_mm[i,]$Honors <- TRUE
+  } else if (last_rows[i,]$CURR_SPEC_PRIM_PGM_TYPE_2=="HON" & is.na(student_mm[i,]$Major.2)){
+    student_mm[i,]$Major.2 <- last_rows[i,]$CURR_SPEC_PRIM_SUBJECT_2
+    student_mm[i,]$Honors <- TRUE
+  }
+  
+}
+student_mm
+
+student_mm[student_mm$STUD_NO_ANONYMOUS=="CC31B12D48CDC09E614C784CF1956325",]
 
 ```
 
@@ -188,6 +245,7 @@ last_rows
  ## Columns to add: Student ID, Major, Honors, Minor, Extras, 200 most common courses
 
 # Building df after getting the data
+
 studentgrades <- data.frame(Student_ID = uniqueids)
 
 # Create a data frame with NA values and course column names
@@ -218,6 +276,15 @@ studentgrades
 
 ```
 
+```{r}
+## OPTION TO REMOVE STUDENTS WITH FEW COURSES IN STUDENTGRADES
+non_null_counts <- apply(studentgrades[, -1], 1, function(row) sum(!is.na(row)))
+
+# Create a new dataframe with student ID and non-null counts
+result_df <- data.frame(student_id = studentgrades[, 1], non_null_count = non_null_counts)
+
+result_df[result_df$non_null_count >= 5,]
+```
 
 
 
