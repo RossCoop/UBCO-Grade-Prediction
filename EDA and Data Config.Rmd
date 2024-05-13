@@ -299,7 +299,88 @@ result_df <- data.frame(student_id = studentgrades[, 1], non_null_count = non_nu
 result_df[result_df$non_null_count >= 5,]
 ```
 
+# EDA
+
+```{r}
+# Big ol graph of student grades
+maths <- studentgrades[complete.cases(studentgrades$MATH.100.1, studentgrades$MATH.100.2), ]
+
+
+maths.lm <- lm(maths$MATH.100.1~ maths$MATH.100.2)
+summary(maths.lm)
+
+plot(maths$MATH.100.1, maths$MATH.100.2)
+abline(maths.lm)
+
+## weird....
+```
+
+```{r}
+mathstat <- studentgrades[complete.cases(studentgrades$MATH.100.1, studentgrades$STAT.230.1), ]
+
+mathstat.lm <- lm(mathstat$MATH.100.1~ mathstat$STAT.230.1)
+summary(mathstat.lm)
+
+plot(mathstat$MATH.100.1, mathstat$STAT.230.1)
+abline(mathstat.lm)
+
+## this one is a little more normal
+## could be issues with course retakers
+
+## want to check on people who only had to take it once...
+```
+
+
+```{r}
+edasubset <- studentgrades[complete.cases(studentgrades$MATH.100.1, studentgrades$PSYO.111.1), ]
+
+edasubset.lm <- lm(edasubset$MATH.100.1~ edasubset$PSYO.111.1)
+summary(edasubset.lm)
+
+plot(edasubset$MATH.100.1, edasubset$PSYO.111.1)
+abline(edasubset.lm)
+
+## ... makes sense that some courses like PSYO 111 are grade boosters
+```
+
+```{r}
+mathstat2 <- studentgrades[complete.cases(studentgrades$MATH.100.2, studentgrades$STAT.230.1), ]
+
+mathstat2.lm <- lm(mathstat2$MATH.100.2~ mathstat2$STAT.230.1)
+summary(mathstat2.lm)
+
+plot(mathstat2$MATH.100.2, mathstat2$STAT.230.1)
+abline(mathstat2.lm)
+
+## want to check on people who only had to take it once...
+
+firsttimer <- anti_join(mathstat,mathstat2)
+first.lm <- lm(firsttimer$MATH.100.1~ firsttimer$STAT.230.1)
+summary(first.lm)
+
+plot(firsttimer$MATH.100.1, firsttimer$STAT.230.1, xlim = c(0,100))
+abline(first.lm)
+
+# just removed the 'low' grades (p much all fails) 
+```
+
+
+```{r}
+# want the average grade for each course... bar plot
+course_averages <- data.frame(Courses = course_names_dups, Average = rep(NA, length(course_names_dups)))
+
+for (i in 1:nrow(course_averages)){
+  course_averages[i,]$Average <- mean(studentgrades[,course_averages[i,1]],na.rm = TRUE)
+}
 
 
 
+na.omit(course_averages)
+barplot(course_averages$Average, names.arg = course_averages$Courses)
+
+# finding out which columns are NA...
+non_na_averages <- anti_join(course_averages, na.omit(course_averages))
+
+# this isnt good. bug testing time
+```
 
