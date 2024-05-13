@@ -101,7 +101,7 @@ unique(df_bsc$CURR_SPEC_SECN_SUBJECT_2)
 subset(df_bsc, CURR_SPEC_PRIM_PGM_TYPE_1 !="" & CURR_SPEC_PRIM_PGM_TYPE_2 !="" & CURR_SPEC_SECN_PGM_TYPE_1 !="" & CURR_SPEC_SECN_PGM_TYPE_2 !="")
 # looping through to find minor(s)
 
-subset(df_bsc, CURR_SPEC_PRIM_PGM_TYPE_1 =="CMJ")
+subset(df_bsc_relevant_courses, CURR_SPEC_PRIM_PGM_TYPE_1 =="CMJ")
 
 
 
@@ -188,10 +188,11 @@ last_rows
 
 # Create a data frame with NA values and course column names
 new_columns <- data.frame(matrix(NA, nrow = nrow(last_rows), ncol = 4))
-colnames(new_columns) <- c("Major.1", "Major.2", "Minor", "Honors")
+
 
 # Add course name columns to existing data frame
 student_mm <- cbind(last_rows[,1], new_columns)
+colnames(student_mm) <- c("StudentID", "Major.1", "Major.2", "Minor", "Honors")
 student_mm$Honors <- FALSE
 
 for(i in 1:nrow(last_rows)){
@@ -232,11 +233,20 @@ for(i in 1:nrow(last_rows)){
     student_mm[i,]$Honors <- TRUE
   }
   
+  # adding combined majors
+  if(last_rows[i,]$CURR_SPEC_PRIM_PGM_TYPE_1=="CMJ"){
+    student_mm[i,]$Major.1 <- last_rows[i,]$CURR_SPEC_PRIM_SUBJECT_1
+    student_mm[i,]$Major.2 <- last_rows[i,]$CURR_SPEC_SECN_SUBJECT_1
+  } else if (last_rows[i,]$CURR_SPEC_PRIM_PGM_TYPE_2=="CMJ" & !is.na(student_mm[i,]$Major.1)){
+    student_mm[i,]$Major.2 <- last_rows[i,]$CURR_SPEC_PRIM_SUBJECT_2
+  }
+  
 }
 student_mm
 
-student_mm[student_mm$STUD_NO_ANONYMOUS=="CC31B12D48CDC09E614C784CF1956325",]
-
+student_mm[student_mm$StudentID=="48791F0E12EB466C2B84020BAB61D1A2",]
+last_rows[last_rows$STUD_NO_ANONYMOUS=="AC1CEB14281A98ACC2CD74C73F361CBF",]
+student_mm[,-1]
 ```
 
 
@@ -246,14 +256,17 @@ student_mm[student_mm$STUD_NO_ANONYMOUS=="CC31B12D48CDC09E614C784CF1956325",]
 
 # Building df after getting the data
 
-studentgrades <- data.frame(Student_ID = uniqueids)
+studentgrades <- data.frame(Student_ID = sort(uniqueids))
+
+
+
 
 # Create a data frame with NA values and course column names
 new_columns <- data.frame(matrix(NA, nrow = nrow(studentgrades), ncol = length(course_names_dups)))
 colnames(new_columns) <- course_names_dups
 
 # Add course name columns to existing data frame
-studentgrades <- cbind(studentgrades, new_columns)
+studentgrades <- cbind(studentgrades, student_mm[,-1], new_columns)
 
 
 # Saving student grades into df
