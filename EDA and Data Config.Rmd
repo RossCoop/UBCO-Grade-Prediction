@@ -51,10 +51,12 @@ df_clean
 # Determining how many bsc students took each course
 unique(df_clean$COURSE_CODE)|>length()
 courses_taken_bsc <- table(df_bsc$COURSE_CODE)
-barplot(sorted_courses_taken_bsc)
+
 
 sorted_courses_taken_bsc <- sort(courses_taken_bsc, decreasing = TRUE)[1:200]#[1:450]
 
+
+barplot(sorted_courses_taken_bsc)
 # saving course names
 course_names <- dimnames(sorted_courses_taken_bsc)[[1]]
 
@@ -290,7 +292,7 @@ non_null_counts <- apply(studentgrades[, -1], 1, function(row) sum(!is.na(row)))
 # Create a new dataframe with student ID and non-null counts
 result_df <- data.frame(student_id = studentgrades[, 1], non_null_count = non_null_counts)
 
-result_df[result_df$non_null_count >= 5,]
+result_df[result_df$non_null_count >= 3,]
 ```
 
 # EDA
@@ -378,5 +380,197 @@ studentgrades[!is.na(studentgrades$PSYO.380.4),c("Student_ID","PSYO.380.4")]
 course_averages
 ```
 
+```{r}
+plot(studentgrades[!is.na(studentgrades$MATH.100.1)&!is.na(studentgrades$MATH.101.1)&!is.na(studentgrades$STAT.230.1)&!is.na(studentgrades$DATA.101.1),c("Student_ID","MATH.100.1","MATH.101.1","STAT.230.1","DATA.101.1")])
 
+studentgrades[!is.na(studentgrades$STAT.230.1),c("Student_ID","MATH.100.1","MATH.101.1","DATA.101.1","STAT.230.1")]
+
+plot(studentgrades[!is.na(studentgrades$STAT.230.1),c("Student_ID","MATH.100.1","MATH.101.1","DATA.101.1","STAT.230.1")])
+```
+```{r}
+plot(studentgrades[!is.na(studentgrades$MATH.100.1)&!is.na(studentgrades$MATH.101.1),c("MATH.100.1","MATH.101.1")])
+
+
+```
+
+
+
+```{r missForest Impute into RF}
+# preparing all student grades with stat230
+stat230grades <- studentgrades[!is.na(studentgrades$STAT.230.1),c("Student_ID","MATH.100.1","MATH.101.1","DATA.101.1","STAT.230.1")]
+stat230grades
+
+library(missForest)
+library(randomForest)
+
+n_rows <- nrow(stat230grades)
+
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+
+
+stat230.imputed <- missForest(stat230grades[,2:5])$ximp
+
+stat230.rf <- randomForest(STAT.230.1~., data=stat230.imputed[train_indices,] )
+stat230.pred <- predict(stat230.rf, newdata = stat230.imputed[test_indices,])
+
+stat230.real <- stat230grades[test_indices,]$STAT.230.1
+
+# MSE value to compare to other models
+mse <- mean((stat230.pred - stat230.real)^2)
+mse
+```
+
+```{r RF on all non-NA data}
+# getting all students with grades in all courses
+stat230grades.full <- studentgrades[!is.na(studentgrades$MATH.100.1)&!is.na(studentgrades$MATH.101.1)&!is.na(studentgrades$STAT.230.1)&!is.na(studentgrades$DATA.101.1),c("Student_ID","MATH.100.1","MATH.101.1","STAT.230.1","DATA.101.1")]
+stat230grades.full
+
+n_rows <- nrow(stat230grades.full)
+
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+library(randomForest)
+
+stat230.rf <- randomForest(STAT.230.1~., data=stat230grades.full[train_indices,2:5] )
+stat230.pred <- predict(stat230.rf, newdata = stat230grades.full[test_indices,2:5])
+
+stat230.real <- stat230grades.full[test_indices,2:5]$STAT.230.1
+
+# MSE value to compare to other models
+mse <- mean((stat230.pred - stat230.real)^2)
+mse
+
+## MSE of data without DATA101 is 175...
+## looks like imputing data and running a randomforest is best so far
+```
+
+```{r GBM on partial-NA data}
+# loading in data again
+stat230grades <- studentgrades[!is.na(studentgrades$STAT.230.1),c("Student_ID","MATH.100.1","MATH.101.1","DATA.101.1","STAT.230.1")]
+n_rows <- nrow(stat230grades)
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+library(gbm)
+
+gbm_params <- list(
+  distribution = "gaussian",  # Specify the distribution for regression
+  n.trees = 100,               # Number of trees (iterations)
+  interaction.depth = 4,       # Maximum depth of trees
+  shrinkage = 0.1,             # Learning rate (shrinkage)
+  bag.fraction = 0.5,          # Fraction of training data used for each tree
+  train.fraction = 1.0,        # Fraction of training data used for training (1.0 for full dataset)
+  n.minobsinnode = 10          # Minimum number of observations in terminal nodes
+)
+
+gbm_model <- gbm(STAT.230.1 ~ ., data = stat230grades[train_indices,2:5], distribution = gbm_params$distribution,
+                 n.trees = gbm_params$n.trees, interaction.depth = gbm_params$interaction.depth,
+                 shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
+                 train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode)
+
+# Print the summary of the trained model
+print(summary(gbm_model))
+
+# Make predictions on new data
+# Assuming 'new_data' is your new dataframe for prediction
+predictions <- predict(gbm_model, newdata = stat230grades[test_indices,2:5], n.trees = gbm_params$n.trees)
+
+# Print the predictions
+print(predictions)
+
+mse <- mean((predictions - stat230grades[test_indices,2:5]$STAT.230.1)^2)
+mse
+## 175 mse... getting worse...
+```
+
+```{r GBM on non-NA data}
+# loading in data again TRYING WITH FULL DATA
+stat230grades <- studentgrades[!is.na(studentgrades$MATH.100.1)&!is.na(studentgrades$MATH.101.1)&!is.na(studentgrades$STAT.230.1)&!is.na(studentgrades$DATA.101.1),c("Student_ID","MATH.100.1","MATH.101.1","STAT.230.1","DATA.101.1")]
+stat230grades
+n_rows <- nrow(stat230grades)
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+library(gbm)
+
+gbm_params <- list(
+  distribution = "gaussian",  # Specify the distribution for regression
+  n.trees = 100,               # Number of trees (iterations)
+  interaction.depth = 4,       # Maximum depth of trees
+  shrinkage = 0.1,             # Learning rate (shrinkage)
+  bag.fraction = 0.5,          # Fraction of training data used for each tree
+  train.fraction = 1.0,        # Fraction of training data used for training (1.0 for full dataset)
+  n.minobsinnode = 10          # Minimum number of observations in terminal nodes
+)
+
+gbm_model <- gbm(STAT.230.1 ~ ., data = stat230grades[train_indices,2:5], distribution = gbm_params$distribution,
+                 n.trees = gbm_params$n.trees, interaction.depth = gbm_params$interaction.depth,
+                 shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
+                 train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode)
+
+# Print the summary of the trained model
+print(summary(gbm_model))
+
+# Make predictions on new data
+# Assuming 'new_data' is your new dataframe for prediction
+predictions <- predict(gbm_model, newdata = stat230grades[test_indices,2:5], n.trees = gbm_params$n.trees)
+
+# Print the predictions
+print(predictions)
+
+mse <- mean((predictions - stat230grades[test_indices,2:5]$STAT.230.1)^2)
+mse
+## 128 mse which is a little better when you've got full data
+```
+
+```{r missForest impute into GBM}
+# now, does imputing the data before GBM work better?
+# preparing all student grades with stat230
+stat230grades <- studentgrades[!is.na(studentgrades$STAT.230.1),c("Student_ID","MATH.100.1","MATH.101.1","DATA.101.1","STAT.230.1")]
+stat230grades
+
+library(missForest)
+library(gbm)
+
+n_rows <- nrow(stat230grades)
+
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+
+
+stat230.imputed <- missForest(stat230grades[,2:5])$ximp
+
+gbm_params <- list(
+  distribution = "gaussian",  # Specify the distribution for regression
+  n.trees = 100,               # Number of trees (iterations)
+  interaction.depth = 4,       # Maximum depth of trees
+  shrinkage = 0.1,             # Learning rate (shrinkage)
+  bag.fraction = 0.5,          # Fraction of training data used for each tree
+  train.fraction = 1.0,        # Fraction of training data used for training (1.0 for full dataset)
+  n.minobsinnode = 10          # Minimum number of observations in terminal nodes
+)
+
+gbm_model <- gbm(STAT.230.1 ~ ., data = stat230.imputed[train_indices,], distribution = gbm_params$distribution,
+                 n.trees = gbm_params$n.trees, interaction.depth = gbm_params$interaction.depth,
+                 shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
+                 train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode)
+
+# Print the summary of the trained model
+print(summary(gbm_model))
+
+# Make predictions on new data
+# Assuming 'new_data' is your new dataframe for prediction
+predictions <- predict(gbm_model, newdata = stat230.imputed[test_indices,], n.trees = gbm_params$n.trees)
+
+# Print the predictions
+print(predictions)
+
+mse <- mean((predictions - stat230.imputed[test_indices,]$STAT.230.1)^2)
+mse
+## 109 mse.. better still
+```
 
