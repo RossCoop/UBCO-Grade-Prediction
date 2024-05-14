@@ -574,3 +574,140 @@ mse
 ## 109 mse.. better still
 ```
 
+
+```{r Pipeline for taking a course grade to predict on}
+# takes course (eg. COSC 322)
+# finds all predictors to predict on... run gbm.. take those with top influence?
+
+
+
+stat230grades <- studentgrades[!is.na(studentgrades$STAT.230.1),-1:-5]
+
+
+
+
+grade_counts <- colSums(!is.na(stat230grades))
+# Subset columns with less than 10 grades
+sparse_cols <- names(grade_counts[grade_counts < 10])
+# Subset the dataframe to include only columns with more than 10 grades
+stat230grades <- stat230grades[, -which(names(stat230grades) %in% sparse_cols)]
+
+
+
+
+
+n_rows <- nrow(stat230grades)
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+library(gbm)
+
+gbm_params <- list(
+  distribution = "gaussian",  # Specify the distribution for regression
+  n.trees = 100,               # Number of trees (iterations)
+  interaction.depth = 4,       # Maximum depth of trees
+  shrinkage = 0.1,             # Learning rate (shrinkage)
+  bag.fraction = 0.5,          # Fraction of training data used for each tree
+  train.fraction = 1.0,        # Fraction of training data used for training (1.0 for full dataset)
+  n.minobsinnode = 10          # Minimum number of observations in terminal nodes
+)
+
+# ****CURRENT ERROR****** currently is stopping as some columns only contain few grades (only existing in test set) no bueno and cant train.
+# TODO: remove those cols with few data
+gbm_model <- gbm(STAT.230.1 ~ ., data = stat230grades[train_indices,], distribution = gbm_params$distribution,
+                 n.trees = gbm_params$n.trees, interaction.depth = gbm_params$interaction.depth,
+                 shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
+                 train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode)
+
+# Print the summary of the trained model
+print(summary(gbm_model))
+
+# Make predictions on new data
+# Assuming 'new_data' is your new dataframe for prediction
+predictions <- predict(gbm_model, newdata = stat230grades[test_indices,], n.trees = gbm_params$n.trees)
+
+# Print the predictions
+print(predictions)
+
+mse <- mean((predictions - stat230grades[test_indices,]$STAT.230.1)^2)
+mse
+# 112.9313 eh
+```
+
+```{r}
+### This first removes all courses which are in higher levels (eg. if predicting on STAT.230, 300's and 400's are removed)
+### Then courses which have < 10 grades in them are removed (this is still by chance and may break) temp fix for NA courses in training set
+### GBM used on remaining courses to predict for the course of interest
+
+
+# time to remove all future year courses from prediction
+COI <- "STAT.230.1"
+coursegrades <- studentgrades[!is.na(studentgrades[,COI]),-1:-5]
+
+# figuring out the year level of each course...
+YOI <- as.integer(substr(strsplit(COI, split = ".", fixed = TRUE)[[1]][2],1,1))
+
+column_names <- colnames(coursegrades)
+
+# Extract digits after the period in column names
+column_digits <- as.integer(sub("^[^.]+\\.([0-9]).*", "\\1", column_names))
+
+# Extract the year from the selected course
+course_year <- as.integer(sub("^[^.]+\\.([0-9]+).*", "\\1", COI))
+
+# Find columns with digits not matching the selected course year
+cols_to_remove <- column_names[column_digits > course_year]
+
+# Remove irrelevant columns
+coursegrades <- coursegrades[, !colnames(coursegrades) %in% cols_to_remove]
+
+# extras/ to do next
+grade_counts <- colSums(!is.na(coursegrades))
+# Subset columns with less than 10 grades
+sparse_cols <- names(grade_counts[grade_counts < 10])
+# Subset the dataframe to include only columns with more than 10 grades
+coursegrades <- coursegrades[, -which(names(coursegrades) %in% sparse_cols)]
+
+
+n_rows <- nrow(coursegrades)
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+library(gbm)
+
+gbm_params <- list(
+  distribution = "gaussian",  # Specify the distribution for regression
+  n.trees = 100,               # Number of trees (iterations)
+  interaction.depth = 4,       # Maximum depth of trees
+  shrinkage = 0.1,             # Learning rate (shrinkage)
+  bag.fraction = 0.5,          # Fraction of training data used for each tree
+  train.fraction = 1.0,        # Fraction of training data used for training (1.0 for full dataset)
+  n.minobsinnode = 10          # Minimum number of observations in terminal nodes
+)
+
+
+
+gbm_model <- gbm(STAT.230.1 ~ ., data = coursegrades[train_indices,], distribution = gbm_params$distribution,
+                 n.trees = gbm_params$n.trees, interaction.depth = gbm_params$interaction.depth,
+                 shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
+                 train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode)
+
+# Print the summary of the trained model
+print(summary(gbm_model))
+
+# Make predictions on new data
+# Assuming 'new_data' is your new dataframe for prediction
+predictions <- predict(gbm_model, newdata = coursegrades[test_indices,], n.trees = gbm_params$n.trees)
+
+# Print the predictions
+print(predictions)
+
+mse <- mean((predictions - coursegrades[test_indices,COI])^2)
+mse
+# around 115.. pretty good for first attempts
+```
+```{r}
+colnames(coursegrades)
+colnames(studentgrades)
+```
+
