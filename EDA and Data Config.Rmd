@@ -65,17 +65,11 @@ df_bsc_relevant_courses <- df_bsc[df_bsc$COURSE_CODE %in% course_names, ]
 uniqueids <- unique(df_bsc_relevant_courses$STUD_NO_ANONYMOUS)
 ```
 
-```{r}
-# Subsetting on only courses which are taken the most times ("relevant courses")
-df_bsc <- df_bsc[df_bsc$COURSE_CODE %in% course_names, ]
-length(unique(df_bsc_relevant_courses$STUD_NO_ANONYMOUS))
-length(uniqueids)
-```
 
 
 ```{r}
 # checking individual student ids
-df_clean[df_clean$STUD_NO_ANONYMOUS=="18AAED88A88707993EE1AF22933D1CE3",]
+#df_clean[df_clean$STUD_NO_ANONYMOUS=="18AAED88A88707993EE1AF22933D1CE3",]
 
 
 ```
@@ -129,7 +123,7 @@ subset(df_bsc, STUD_NO_ANONYMOUS=="A9DB35467FB793FFB63E410782268465")
 
 ```{r}
 # finding student who've taken a course more than once
-duplicate_rows <- df_bsc[duplicated(df_bsc[c("STUD_NO_ANONYMOUS", "COURSE_CODE")]) | duplicated(df_bsc[c("STUD_NO_ANONYMOUS", "COURSE_CODE")], fromLast = TRUE), ]
+duplicate_rows <- df_bsc_relevant_courses[duplicated(df_bsc_relevant_courses[c("STUD_NO_ANONYMOUS", "COURSE_CODE")]) | duplicated(df_bsc_relevant_courses[c("STUD_NO_ANONYMOUS", "COURSE_CODE")], fromLast = TRUE), ]
 duplicate_rows[c(1,15,12,13)]
 
 # Count occurrences of each course for each student
@@ -244,9 +238,9 @@ for(i in 1:nrow(last_rows)){
 }
 student_mm
 
-student_mm[student_mm$StudentID=="48791F0E12EB466C2B84020BAB61D1A2",]
-last_rows[last_rows$STUD_NO_ANONYMOUS=="AC1CEB14281A98ACC2CD74C73F361CBF",]
-student_mm[,-1]
+#student_mm[student_mm$StudentID=="48791F0E12EB466C2B84020BAB61D1A2",]
+#last_rows[last_rows$STUD_NO_ANONYMOUS=="AC1CEB14281A98ACC2CD74C73F361CBF",]
+#student_mm[,-1]
 ```
 
 
@@ -372,15 +366,17 @@ course_averages <- data.frame(Courses = course_names_dups, Average = rep(NA, len
 for (i in 1:nrow(course_averages)){
   course_averages[i,]$Average <- mean(studentgrades[,course_averages[i,1]],na.rm = TRUE)
 }
+```
 
-
-
-na.omit(course_averages)
+```{r}
 barplot(course_averages$Average, names.arg = course_averages$Courses)
 
-# finding out which columns are NA...
-non_na_averages <- anti_join(course_averages, na.omit(course_averages))
+subset(course_averages, Courses == "PSYO.380.4")
 
-# this isnt good. bug testing time
+studentgrades[!is.na(studentgrades$PSYO.380.4),c("Student_ID","PSYO.380.4")]
+
+course_averages
 ```
+
+
 
