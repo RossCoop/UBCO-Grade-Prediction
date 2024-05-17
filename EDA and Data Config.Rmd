@@ -53,7 +53,7 @@ unique(df_clean$COURSE_CODE)|>length()
 courses_taken_bsc <- table(df_bsc$COURSE_CODE)
 
 
-sorted_courses_taken_bsc <- sort(courses_taken_bsc, decreasing = TRUE)[1:200]#[1:450]
+sorted_courses_taken_bsc <- sort(courses_taken_bsc, decreasing = TRUE)[1:450]
 
 
 barplot(sorted_courses_taken_bsc)
@@ -636,14 +636,14 @@ mse
 
 
 
-```{r}
+```{r MAIN TESTING}
 ### This first removes all courses which are in higher levels (eg. if predicting on STAT.230, 300's and 400's are removed)
 ### Then courses which have < 10 grades in them are removed (this is still by chance and may break) temp fix for NA courses in training set
 ### GBM used on remaining courses to predict for the course of interest
 set.seed(5934)
 
 # time to remove all future year courses from prediction
-COI <- "COSC.322"
+COI <- "STAT.230.1"
 coursegrades <- studentgrades[!is.na(studentgrades[,COI]),-1:-5]
 
 # figuring out the year level of each course...
@@ -693,9 +693,9 @@ library(gbm)
 
 gbm_params <- list(
   distribution = "gaussian",  # Specify the distribution for regression
-  n.trees = 100,               # Number of trees (iterations)
+  n.trees = 250,               # Number of trees (iterations)
   interaction.depth = 4,       # Maximum depth of trees
-  shrinkage = 0.1,             # Learning rate (shrinkage)
+  shrinkage = 0.05,             # Learning rate (shrinkage)
   bag.fraction = 0.5,          # Fraction of training data used for each tree
   train.fraction = 1.0,        # Fraction of training data used for training (1.0 for full dataset)
   n.minobsinnode = 10          # Minimum number of observations in terminal nodes
@@ -703,7 +703,7 @@ gbm_params <- list(
 
 
 
-gbm_model <- gbm(COSC.322 ~ ., data = coursegrades[train_indices,], distribution = gbm_params$distribution,
+gbm_model <- gbm(STAT.230.1 ~ ., data = coursegrades[train_indices,], distribution = gbm_params$distribution,
                  n.trees = gbm_params$n.trees, interaction.depth = gbm_params$interaction.depth,
                  shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
                  train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 10)
@@ -799,15 +799,43 @@ mse
 
 
 ```{r}
-actual <- coursegrades[test_indices,]$COSC.322
+actual <- coursegrades[test_indices,]$STAT.230.1
 plot(actual, predictions, xlab = "Actual Grades", ylab = "Predicted Grades", 
      main = "Predicted vs Actual Grades", pch = 16, col = "blue", xlim = c(0,100), ylim = c(0,100))
 abline(0, 1, col = "red")
 
+max(predictions)
+max(actual)
 
 line.lm <- lm(actual~predictions)
 abline(line.lm, col = "green")
 ```
+
+```{r conf matrix}
+# Define breaks for intervals of 5
+breaks <- seq(0, 100, by = 5)
+
+# Create labels for the intervals
+labels <- paste(breaks[-length(breaks)], breaks[-1], sep = "-")
+
+actual_fac <- cut(actual, breaks = breaks, labels = labels, right = TRUE, include.lowest = TRUE)
+pred_fac <- cut(predictions, breaks = breaks, labels = labels, right = TRUE, include.lowest = TRUE)
+
+confusion_matrix <- table(actual_fac, pred_fac)
+
+# Print the confusion matrix
+print(confusion_matrix)
+
+library(caret)
+
+confusion_matrix <- confusionMatrix(confusion_matrix)
+
+# Print recall for each class
+rec <- confusion_matrix$byClass[, "Recall"]
+prec <- confusion_matrix$byClass[, "Precision"]
+f1_score <- 2*prec*rec/(prec+rec)
+```
+
 
 ```{r}
 residuals <- actual - predictions
