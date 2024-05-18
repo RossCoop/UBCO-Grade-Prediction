@@ -747,7 +747,7 @@ coursegrades <- coursegrades[, colnames(coursegrades) %in% cols_to_keep]
 
 # extras/ to do next
 grade_counts <- colSums(!is.na(coursegrades))
-# Subset columns with less than 10 grades
+# Subset columns with less than x grades
 sparse_cols <- names(grade_counts[grade_counts <= 5])
 
 
@@ -811,30 +811,7 @@ line.lm <- lm(actual~predictions)
 abline(line.lm, col = "green")
 ```
 
-```{r conf matrix}
-# Define breaks for intervals of 5
-breaks <- seq(0, 100, by = 5)
 
-# Create labels for the intervals
-labels <- paste(breaks[-length(breaks)], breaks[-1], sep = "-")
-
-actual_fac <- cut(actual, breaks = breaks, labels = labels, right = TRUE, include.lowest = TRUE)
-pred_fac <- cut(predictions, breaks = breaks, labels = labels, right = TRUE, include.lowest = TRUE)
-
-confusion_matrix <- table(actual_fac, pred_fac)
-
-# Print the confusion matrix
-print(confusion_matrix)
-
-library(caret)
-
-confusion_matrix <- confusionMatrix(confusion_matrix)
-
-# Print recall for each class
-rec <- confusion_matrix$byClass[, "Recall"]
-prec <- confusion_matrix$byClass[, "Precision"]
-f1_score <- 2*prec*rec/(prec+rec)
-```
 
 
 ```{r}
@@ -852,6 +829,47 @@ qqnorm(residuals, main = "Normal Q-Q Plot of Residuals")
 qqline(residuals, col = "red")
 ```
 
+
+```{r conf matrix}
+# Define breaks for intervals of 5
+breaks <- seq(0, 100, by = 5)
+
+# Create labels for the intervals
+labels <- paste(breaks[-length(breaks)], breaks[-1], sep = "-")
+
+actual_fac <- cut(actual, breaks = breaks, labels = labels, right = TRUE, include.lowest = TRUE)
+pred_fac <- cut(predictions, breaks = breaks, labels = labels, right = TRUE, include.lowest = TRUE)
+
+confusion_matrix <- table(actual_fac, pred_fac)
+
+# Print the confusion matrix
+
+library(caret)
+
+confusion_matrix <- confusionMatrix(confusion_matrix)
+confusion_matrix
+
+# Print recall for each class
+rec <- confusion_matrix$byClass[, "Recall"]
+prec <- confusion_matrix$byClass[, "Precision"]
+f1_score <- 2*prec*rec/(prec+rec)
+```
+
+```{r heat map}
+library(ggplot2)
+
+confusion_matrix$Freq[is.na(confusion_matrix$Freq)] <- 0
+
+# Create the heat map
+ggplot(as.data.frame(confusion_matrix$table), aes(x = actual_fac, y = pred_fac, fill = Freq)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient(low = "white", high = "red") +
+  labs(x = "Actual Grades", y = "Predicted Grades", fill = "Frequency") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  geom_tile(data = subset(as.data.frame(confusion_matrix$table), actual_fac == pred_fac),
+            aes(fill = Freq), color = "black")
+```
 
 
 ```{r}
