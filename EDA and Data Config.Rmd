@@ -7,7 +7,7 @@ output: html_document
 
 ```{r}
 df <- read.csv("..\\UBCO-Grade-Prediction-data\\student-data.csv")
-#df <- df[df$DEGR_PGM_CD == "BSC-O ",]
+
 df_clean <- df[,c(1,2,3,4,5,6,7,8,9,10,11,12,13,15,16,17)]
 #df_clean <- na.omit(df_clean)
 # Do some cleaning on chr columns
@@ -42,9 +42,11 @@ df <- subset(df, SEC_SES_YR < 2022.5)
 df_clean <- subset(df_clean, SEC_SES_YR < 2022.5)
 
 # Subsetting only BSc students
+df_bsc <- df_clean
 df_bsc <- df_clean[df_clean$DEGR_PGM_CD=="BSC-O",]
 
-df_clean
+
+df_bsc
 ```
 
 ```{r}
@@ -54,7 +56,7 @@ courses_taken_bsc <- table(df_bsc$COURSE_CODE)
 
 
 sorted_courses_taken_bsc <- sort(courses_taken_bsc, decreasing = TRUE)[1:450]
-
+sorted_courses_taken_bsc
 
 barplot(sorted_courses_taken_bsc)
 # saving course names
@@ -76,52 +78,6 @@ uniqueids <- unique(df_bsc_relevant_courses$STUD_NO_ANONYMOUS)
 
 ```
 
-```{r}
-# showing all students which never made it to second year
-# need avg year of student on student id
-# need to make the student df (sticky notes)
-
-# list of all unique student IDs
-uniqueids <- unique(df_bsc$STUD_NO_ANONYMOUS)
-
-# looping through to find major(s)
-unique(df_bsc$CURR_SPEC_PRIM_PGM_TYPE_1)
-unique(df_bsc$CURR_SPEC_PRIM_SUBJECT_1)
-unique(df_bsc$CURR_SPEC_PRIM_PGM_TYPE_2)
-unique(df_bsc$CURR_SPEC_PRIM_SUBJECT_2)
-unique(df_bsc$CURR_SPEC_SECN_PGM_TYPE_1)
-unique(df_bsc$CURR_SPEC_SECN_SUBJECT_1)
-unique(df_bsc$CURR_SPEC_SECN_PGM_TYPE_2)
-unique(df_bsc$CURR_SPEC_SECN_SUBJECT_2)
-
-subset(df_bsc, CURR_SPEC_PRIM_PGM_TYPE_1 !="" & CURR_SPEC_PRIM_PGM_TYPE_2 !="" & CURR_SPEC_SECN_PGM_TYPE_1 !="" & CURR_SPEC_SECN_PGM_TYPE_2 !="")
-# looping through to find minor(s)
-
-subset(df_bsc_relevant_courses, CURR_SPEC_PRIM_PGM_TYPE_1 =="CMJ")
-
-
-
-# all students who only "did" 1st year and have avg of less than 30%
-firstdrops <- c()
-for(id in uniqueids){
-  dat <- subset(df_bsc, STUD_NO_ANONYMOUS==id)
-  if((mean(dat$CURR_YEAR_LEVEL) == 1) & (mean(dat$HDR_CRS_PCT_GRD) <= 30)){
-    firstdrops <- append(firstdrops,id)
-  }
-}
-firstdrops
-
-
-subset(df_bsc, STUD_NO_ANONYMOUS=="A9DB35467FB793FFB63E410782268465")
-
-#df_clean
-```
-
-
-```{r}
-# Removing all students who dropped out horribly
-
-```
 
 ```{r}
 # finding student who've taken a course more than once
@@ -175,11 +131,6 @@ library(dplyr)
 last_rows <- df_bsc_relevant_courses %>%
   group_by(STUD_NO_ANONYMOUS) %>%
   slice(n())
-
-# Print the result
-last_rows
-
-
 
 
 # Create a data frame with NA values and course column names
@@ -246,7 +197,7 @@ student_mm
 ```
 
 
-```{r}
+```{r Making studentgrades with .1 .2 etc}
 # Making the Data Frame
  ## Columns to add: Student ID, Major, Honors, Minor, Extras, 200 most common courses
 
@@ -280,10 +231,35 @@ for (i in 1:nrow(df_bsc_relevant_courses)){
   studentgrades[studentgrades$Student_ID==df_bsc_relevant_courses[i,]$STUD_NO_ANONYMOUS,coursecol+rep] <- df_bsc_relevant_courses[i,]$HDR_CRS_PCT_GRD
 }
 
-studentgrades
+studentgrades[,c("Student_ID","MATH.101.1","MATH.101.2")]
 
 
 ```
+
+```{r Making studentgrades using most recent grade}
+studentgrades <- data.frame(Student_ID = sort(uniqueids))
+
+# Create a data frame with NA values and course column names
+new_columns <- data.frame(matrix(NA, nrow = nrow(studentgrades), ncol = length(course_names)))
+colnames(new_columns) <- course_names
+
+# Add course name columns to existing data frame
+studentgrades <- cbind(studentgrades, student_mm[,-1], new_columns)
+
+
+# Saving student grades into df
+for (i in 1:nrow(df_bsc_relevant_courses)){
+  
+  # finding the index of course name .1
+  coursecol <- grep(df_bsc_relevant_courses[i,]$COURSE_CODE, colnames(studentgrades))[1]
+  
+  # Saving student grade into studentgrades df
+  studentgrades[studentgrades$Student_ID==df_bsc_relevant_courses[i,]$STUD_NO_ANONYMOUS,coursecol+rep] <- df_bsc_relevant_courses[i,]$HDR_CRS_PCT_GRD
+}
+
+studentgrades
+```
+
 
 ```{r}
 ## OPTION TO REMOVE STUDENTS WITH FEW COURSES IN STUDENTGRADES
@@ -397,7 +373,7 @@ plot(studentgrades[!is.na(studentgrades$MATH.100.1)&!is.na(studentgrades$MATH.10
 
 ```{r missForest Impute into RF}
 # preparing all student grades with stat230
-stat230grades <- studentgrades[!is.na(studentgrades$STAT.230.1),c("Student_ID","MATH.100.1","MATH.101.1","DATA.101.1","STAT.230.1")]
+stat230grades <- studentgrades[!is.na(studentgrades$STAT.230.1),c("Student_ID","MATH.100.1","MATH.101.1","STAT.230.1","MATH.200.1","MATH.221.1","COSC.211.1","COSC.222.1","COSC.221.1")]
 stat230grades
 
 library(missForest)
@@ -416,6 +392,33 @@ stat230.rf <- randomForest(STAT.230.1~., data=stat230.imputed[train_indices,] )
 stat230.pred <- predict(stat230.rf, newdata = stat230.imputed[test_indices,])
 
 stat230.real <- stat230grades[test_indices,]$STAT.230.1
+
+# MSE value to compare to other models
+mse <- mean((stat230.pred - stat230.real)^2)
+mse
+```
+
+```{r missForest Impute into RF NEW USING NEW studentgrades}
+# preparing all student grades with stat230
+stat230grades <- studentgrades[!is.na(studentgrades$STAT.230),c("Student_ID","MATH.100","MATH.101","STAT.230","MATH.200","MATH.221","COSC.211","COSC.222","COSC.221")]
+stat230grades
+
+library(missForest)
+library(randomForest)
+
+n_rows <- nrow(stat230grades)
+
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+
+
+stat230.imputed <- missForest(stat230grades[,2:5])$ximp
+
+stat230.rf <- randomForest(STAT.230~., data=stat230.imputed[train_indices,] )
+stat230.pred <- predict(stat230.rf, newdata = stat230.imputed[test_indices,])
+
+stat230.real <- stat230grades[test_indices,]$STAT.230
 
 # MSE value to compare to other models
 mse <- mean((stat230.pred - stat230.real)^2)
@@ -640,10 +643,10 @@ mse
 ### This first removes all courses which are in higher levels (eg. if predicting on STAT.230, 300's and 400's are removed)
 ### Then courses which have < 10 grades in them are removed (this is still by chance and may break) temp fix for NA courses in training set
 ### GBM used on remaining courses to predict for the course of interest
-set.seed(5934)
+#set.seed(5934)
 
 # time to remove all future year courses from prediction
-COI <- "STAT.230.1"
+COI <- "STAT.230"
 coursegrades <- studentgrades[!is.na(studentgrades[,COI]),-1:-5]
 
 # figuring out the year level of each course...
@@ -683,8 +686,9 @@ if(length(strsplit(COI, split = ".", fixed = TRUE)[[1]]) == 3){
 coursegrades <- coursegrades[, -which(names(coursegrades) %in% sparse_cols)]
 ```
 
+
 ```{r}
-set.seed(5934)
+#set.seed(5934)
 n_rows <- nrow(coursegrades)
 train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
 test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
@@ -703,10 +707,10 @@ gbm_params <- list(
 
 
 
-gbm_model <- gbm(STAT.230.1 ~ ., data = coursegrades[train_indices,], distribution = gbm_params$distribution,
+gbm_model <- gbm(STAT.230 ~ ., data = coursegrades[train_indices,], distribution = gbm_params$distribution,
                  n.trees = gbm_params$n.trees, interaction.depth = gbm_params$interaction.depth,
                  shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
-                 train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 10)
+                 train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 20)
 
 # Print the summary of the trained model
 print(summary(gbm_model))
@@ -717,13 +721,15 @@ predictions <- predict(gbm_model, newdata = coursegrades[test_indices,], n.trees
 
 
 # Print the predictions
-predictions
+#predictions
 
 mse <- mean((predictions - coursegrades[test_indices,COI])^2)
 mse
 
 ```
-```{r}
+
+
+```{r removed current year grades from prediction}
 ## removes all courses of equal or higher level before prediction
 set.seed(5934)
 # time to remove all future year courses from prediction
@@ -799,7 +805,7 @@ mse
 
 
 ```{r}
-actual <- coursegrades[test_indices,]$STAT.230.1
+actual <- coursegrades[test_indices,]$STAT.230
 plot(actual, predictions, xlab = "Actual Grades", ylab = "Predicted Grades", 
      main = "Predicted vs Actual Grades", pch = 16, col = "blue", xlim = c(0,100), ylim = c(0,100))
 abline(0, 1, col = "red")
@@ -807,7 +813,7 @@ abline(0, 1, col = "red")
 max(predictions)
 max(actual)
 
-line.lm <- lm(actual~predictions)
+line.lm <- lm(predictions~actual)
 abline(line.lm, col = "green")
 ```
 
@@ -847,7 +853,7 @@ confusion_matrix <- table(actual_fac, pred_fac)
 library(caret)
 
 confusion_matrix <- confusionMatrix(confusion_matrix)
-confusion_matrix
+#confusion_matrix
 
 # Print recall for each class
 rec <- confusion_matrix$byClass[, "Recall"]
@@ -967,13 +973,16 @@ mse
 
 
 ```{r}
-actual <- coursegrades[test_indices,]$STAT.230.1
+predictions <- stat230.pred
+actual <- stat230.real
+
+actual <- coursegrades[test_indices,]$STAT.230
 plot(actual, predictions, xlab = "Actual Grades", ylab = "Predicted Grades", 
      main = "Predicted vs Actual Grades", pch = 16, col = "blue", xlim = c(0,100), ylim = c(0,100))
 abline(0, 1, col = "red")
 
 
-line.lm <- lm(actual~predictions)
+line.lm <- lm(predictions~actual)
 abline(line.lm, col = "green")
 ```
 
