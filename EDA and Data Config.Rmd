@@ -55,7 +55,7 @@ unique(df_clean$COURSE_CODE)|>length()
 courses_taken_bsc <- table(df_bsc$COURSE_CODE)
 
 
-sorted_courses_taken_bsc <- sort(courses_taken_bsc, decreasing = TRUE)[1:450]
+sorted_courses_taken_bsc <- sort(courses_taken_bsc, decreasing = TRUE)[1:200]
 sorted_courses_taken_bsc
 
 barplot(sorted_courses_taken_bsc)
@@ -643,7 +643,7 @@ mse
 ### This first removes all courses which are in higher levels (eg. if predicting on STAT.230, 300's and 400's are removed)
 ### Then courses which have < 10 grades in them are removed (this is still by chance and may break) temp fix for NA courses in training set
 ### GBM used on remaining courses to predict for the course of interest
-#set.seed(5934)
+set.seed(5934)
 
 # time to remove all future year courses from prediction
 COI <- "STAT.230"
@@ -688,7 +688,7 @@ coursegrades <- coursegrades[, -which(names(coursegrades) %in% sparse_cols)]
 
 
 ```{r}
-#set.seed(5934)
+set.seed(5934)
 n_rows <- nrow(coursegrades)
 train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
 test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
@@ -970,7 +970,33 @@ mse
 
 ```
 
+```{r missForest Impute into RF}
+set.seed(5934)
+# preparing all student grades with stat230
+stat230grades <- studentgrades[!is.na(studentgrades$STAT.230),c("Student_ID","MATH.100","MATH.101","STAT.230","MATH.200","MATH.221","COSC.211","COSC.222","COSC.221")]
+stat230grades
 
+library(missForest)
+library(randomForest)
+
+n_rows <- nrow(stat230grades)
+
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+
+
+stat230.imputed <- missForest(stat230grades[,2:9])$ximp
+
+stat230.rf <- randomForest(STAT.230~., data=stat230.imputed[train_indices,] )
+stat230.pred <- predict(stat230.rf, newdata = stat230.imputed[test_indices,])
+
+stat230.real <- stat230grades[test_indices,]$STAT.230
+
+# MSE value to compare to other models
+mse <- mean((stat230.pred - stat230.real)^2)
+mse
+```
 
 ```{r}
 predictions <- stat230.pred
@@ -1000,3 +1026,99 @@ abline(line.lm, col = "green")
 qqnorm(residuals, main = "Normal Q-Q Plot of Residuals")
 qqline(residuals, col = "red")
 ```
+
+
+```{r Using missForest for imputation}
+set.seed(5934)
+# preparing all student grades with stat230
+stat230grades <- studentgrades[!is.na(studentgrades$STAT.230),-1:-5]
+stat230grades
+
+library(missForest)
+library(randomForest)
+
+n_rows <- nrow(stat230grades)
+
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+# to remove stat 230 grades from test_indicies rows
+stat230.real <- stat230grades[test_indices,]$STAT.230
+stat230grades[test_indices,]$STAT.230 <- NA
+
+stat230.imputed <- missForest(stat230grades)$ximp
+
+#stat230.rf <- randomForest(STAT.230~., data=stat230.imputed[train_indices,] )
+#stat230.pred <- predict(stat230.rf, newdata = stat230.imputed[test_indices,])
+stat230.pred <- stat230.imputed[test_indices,]$STAT.230
+
+
+# MSE value to compare to other models
+mse <- mean((stat230.pred - stat230.real)^2)
+mse
+```
+
+```{r}
+predictions <- stat230.pred
+actual <- stat230.real
+
+actual <- coursegrades[test_indices,]$STAT.230
+plot(actual, predictions, xlab = "Actual Grades", ylab = "Predicted Grades", 
+     main = "Predicted vs Actual Grades", pch = 16, col = "blue", xlim = c(0,100), ylim = c(0,100))
+abline(0, 1, col = "red")
+
+
+line.lm <- lm(predictions~actual)
+abline(line.lm, col = "green")
+```
+
+```{r}
+residuals <- actual - predictions
+plot(predictions, residuals, xlab = "Predicted Grades", ylab = "Residuals", 
+     main = "Residual Plot", pch = 16, col = "blue")
+abline(h = 0, col = "red")
+
+line.lm <- lm(residuals~predictions)
+abline(line.lm, col = "green")
+```
+
+```{r}
+qqnorm(residuals, main = "Normal Q-Q Plot of Residuals")
+qqline(residuals, col = "red")
+```
+
+
+```{r Simple models}
+coursegrades <- studentgrades[!is.na(studentgrades$STAT.230)&!is.na(studentgrades$MATH.101)&!is.na(studentgrades$COSC.221),c("STAT.230","MATH.101","COSC.221")]
+coursegrades
+```
+
+
+
+```{r}
+set.seed(5934)
+
+library(missForest)
+library(randomForest)
+
+n_rows <- nrow(coursegrades)
+
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+
+
+stat230.rf <- randomForest(STAT.230~., data=coursegrades[train_indices,] )
+stat230.pred <- predict(stat230.rf, newdata = coursegrades[test_indices,])
+
+
+
+# MSE value to compare to other models
+mse <- mean((stat230.pred - stat230.real)^2)
+mse
+```
+
+```{r}
+subset(studentgrades, Major.1 == "DATA" | Major.2== "DATA" | Minor=="DATA")
+```
+
