@@ -690,7 +690,7 @@ coursegrades <- coursegrades[, -which(names(coursegrades) %in% sparse_cols)]
 ```{r}
 set.seed(5934)
 n_rows <- nrow(coursegrades)
-train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+train_indices <- sample(1:n_rows, 0.7 * n_rows)  # 80% of rows for training
 test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
 
 library(gbm)
@@ -710,7 +710,7 @@ gbm_params <- list(
 gbm_model <- gbm(STAT.230 ~ ., data = coursegrades[train_indices,], distribution = gbm_params$distribution,
                  n.trees = gbm_params$n.trees, interaction.depth = gbm_params$interaction.depth,
                  shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
-                 train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 20)
+                 train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 5)
 
 # Print the summary of the trained model
 print(summary(gbm_model))
@@ -836,7 +836,7 @@ qqline(residuals, col = "red")
 ```
 
 
-```{r conf matrix}
+```{r conf matrix and heat map}
 # Define breaks for intervals of 5
 breaks <- seq(0, 100, by = 5)
 
@@ -859,9 +859,7 @@ confusion_matrix <- confusionMatrix(confusion_matrix)
 rec <- confusion_matrix$byClass[, "Recall"]
 prec <- confusion_matrix$byClass[, "Precision"]
 f1_score <- 2*prec*rec/(prec+rec)
-```
 
-```{r heat map}
 library(ggplot2)
 
 confusion_matrix$Freq[is.na(confusion_matrix$Freq)] <- 0
@@ -1120,5 +1118,73 @@ mse
 
 ```{r}
 subset(studentgrades, Major.1 == "DATA" | Major.2== "DATA" | Minor=="DATA")
+```
+
+
+```{r Matrix Factorization}
+library(recosystem)
+
+# Example data: students, courses, and grades (with NAs for missing grades)
+students <- c("Student1", "Student2", "Student3", "Student4")
+courses <- c("Course1", "Course2", "Course3")
+grades <- matrix(c(90, NA, 80, 70, 85, NA, NA, 95, 100, 60, NA, 90), nrow = 4, byrow = TRUE)
+rownames(grades) <- students
+colnames(grades) <- courses
+
+
+
+# Convert the matrix into a data frame for recosystem
+data <- data.frame(
+  user = rep(1:nrow(grades), times = ncol(grades)),
+  item = rep(1:ncol(grades), each = nrow(grades)),
+  rating = as.vector(t(grades))
+)
+data <- na.omit(data)  # Remove rows with NA ratings
+
+# Create a Reco object
+r <- Reco()
+
+# Define the training set
+train_set <- data_memory(user_index = data$user, item_index = data$item, rating = data$rating)
+
+# Train the model with ALS
+r$train(train_set, opts = list(dim = 10, costp_l2 = 0.1, costq_l2 = 0.1, lrate = 0.1, niter = 20))
+
+
+# Initialize the matrix to store predicted grades
+predicted_grades <- matrix(NA, nrow = nrow(grades), ncol = ncol(grades))
+
+# Predict missing values
+for (i in 1:nrow(grades)) {
+  for (j in 1:ncol(grades)) {
+    if (is.na(grades[i, j])) {
+      predicted_grades[i, j] <- r$predict(data_memory(user_index = i, item_index = j))
+    } else {
+      predicted_grades[i, j] <- grades[i, j]
+    }
+  }
+}
+
+# Convert the predicted grades back to the original format
+rownames(predicted_grades) <- students
+colnames(predicted_grades) <- courses
+
+# Print the predicted grades matrix
+print(predicted_grades)
+
+
+# Calculate MSE for observed (non-NA) grades
+observed_indices <- which(!is.na(grades))
+mse <- mean((predicted_grades[observed_indices] - grades[observed_indices])^2)
+cat("Mean Squared Error (MSE):", mse, "\n")
+
+
+grades
+data
+predicted_grades
+```
+
+```{r}
+library(NMF)
 ```
 
