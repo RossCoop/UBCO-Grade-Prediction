@@ -1120,22 +1120,35 @@ mse
 subset(studentgrades, Major.1 == "DATA" | Major.2== "DATA" | Minor=="DATA")
 ```
 
-
-```{r Matrix Factorization}
-library(recosystem)
-
+```{r Dataset creation for MF}
 # Getting list of students wanted
 studs <- studentgrades[!is.na(studentgrades$STAT.230),]$Student_ID
-coursedata <- df_bsc[df_bsc$STUD_NO_ANONYMOUS %in% studs,]
-#coursedata <- coursedata[coursedata$COURSE_CODE == "STAT.230" | coursedata$COURSE_CODE == "MATH.101" | coursedata$COURSE_CODE == "COSC.221" | coursedata$COURSE_CODE == "DATA.101",]
-coursedata <- coursedata[order(coursedata$COURSE_CODE),]
 
-data <- data.frame(
-  student = coursedata$STUD_NO_ANONYMOUS,
-  course = coursedata$COURSE_CODE,
-  grade = coursedata$HDR_CRS_PCT_GRD
-)
+data <- data.frame(student = character(), course=character(), grade=double())
+for(id in studs){
+  for(c in 6:205){
+    if(!is.na(studentgrades[studentgrades$Student_ID==id,c])){
+      data <- rbind(data, list(id,colnames(studentgrades)[c],studentgrades[studentgrades$Student_ID==id,c]))
+    }
+  }
+}
+
+colnames(data) <- c("student","course","grade")
+
 data <- na.omit(data)  # Remove rows with NA ratings
+
+# Split into obj course and not
+data_obj <- data[data$course=="STAT.230",]
+data_non <- data[!data$course=="STAT.230",]
+
+# Creating the testing set from obj course
+n_rows <- nrow(data_obj)
+
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+data <- rbind(data_obj[test_indices,], data_obj[train_indices,],data_non)
+
 
 # Factoring data
 data[] <- lapply(data, function(x) {
@@ -1146,28 +1159,25 @@ data[] <- lapply(data, function(x) {
   }
 })
 
+obj_course <- data[1,2]
+```
+
+
+```{r Matrix Factorization}
+library(recosystem)
 
 # Create a Reco object
 r <- Reco()
 
-# Create training vs test sets
-n_rows <- nrow(data)
-splitr <- as.integer(n_rows*0.9)
-#train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
-#test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
-train_indices <- 1:splitr
-test_indices <- (splitr+1):n_rows
-
-
 # Define the training set
-train_set <- data_memory(user_index = data$student[train_indices], item_index = data$course[train_indices], rating = data$grade[train_indices])
+train_set <- data_memory(user_index = data$student[-1:-length(test_indices)], item_index = data$course[-1:-length(test_indices)], rating = data$grade[-1:-length(test_indices)])
 
 # Train the model with ALS
 r$train(train_set, opts = list(dim = 10, costp_l2 = 0.2, costq_l2 = 0.2, lrate = 0.05, niter = 20))
 
 
 # Initialize the matrix to store predicted grades
-predicted_grades <- data[test_indices,]
+predicted_grades <- data[1:length(test_indices),]
 predicted_grades$grade <- NA
 
 # Predict missing values
@@ -1183,7 +1193,7 @@ print(predicted_grades)
 
 # Calculate MSE for observed (non-NA) grades
 observed_indices <- which(!is.na(grades))
-mse <- mean((predicted_grades$grade - data[test_indices,]$grade)^2)
+mse <- mean((predicted_grades$grade - data_obj[test_indices,]$grade)^2)
 cat("Mean Squared Error (MSE):", mse, "\n")
 
 
@@ -1196,9 +1206,6 @@ predictions <- predicted_grades$grade
 plot(actual, predictions, xlab = "Actual Grades", ylab = "Predicted Grades", 
      main = "Predicted vs Actual Grades", pch = 16, col = "blue", xlim = c(0,100), ylim = c(0,100))
 abline(0, 1, col = "red")
-
-max(predictions)
-max(actual)
 
 line.lm <- lm(predictions~actual)
 abline(line.lm, col = "green")
