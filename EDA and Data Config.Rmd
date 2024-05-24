@@ -1124,14 +1124,97 @@ subset(studentgrades, Major.1 == "DATA" | Major.2== "DATA" | Minor=="DATA")
 ```{r Matrix Factorization}
 library(recosystem)
 
+# Getting list of students wanted
+studs <- studentgrades[!is.na(studentgrades$STAT.230),]$Student_ID
+coursedata <- df_bsc[df_bsc$STUD_NO_ANONYMOUS %in% studs,]
+#coursedata <- coursedata[coursedata$COURSE_CODE == "STAT.230" | coursedata$COURSE_CODE == "MATH.101" | coursedata$COURSE_CODE == "COSC.221" | coursedata$COURSE_CODE == "DATA.101",]
+coursedata <- coursedata[order(coursedata$COURSE_CODE),]
+
+data <- data.frame(
+  student = coursedata$STUD_NO_ANONYMOUS,
+  course = coursedata$COURSE_CODE,
+  grade = coursedata$HDR_CRS_PCT_GRD
+)
+data <- na.omit(data)  # Remove rows with NA ratings
+
+# Factoring data
+data[] <- lapply(data, function(x) {
+  if (is.character(x)) {
+    as.numeric(factor(x))
+  } else {
+    x
+  }
+})
+
+
+# Create a Reco object
+r <- Reco()
+
+# Create training vs test sets
+n_rows <- nrow(data)
+splitr <- as.integer(n_rows*0.9)
+#train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+#test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+train_indices <- 1:splitr
+test_indices <- (splitr+1):n_rows
+
+
+# Define the training set
+train_set <- data_memory(user_index = data$student[train_indices], item_index = data$course[train_indices], rating = data$grade[train_indices])
+
+# Train the model with ALS
+r$train(train_set, opts = list(dim = 10, costp_l2 = 0.2, costq_l2 = 0.2, lrate = 0.05, niter = 20))
+
+
+# Initialize the matrix to store predicted grades
+predicted_grades <- data[test_indices,]
+predicted_grades$grade <- NA
+
+# Predict missing values
+
+for(i in 1:nrow(predicted_grades)){
+  predicted_grades[i,]$grade <- r$predict(data_memory(user_index = predicted_grades[i,]$student, item_index = predicted_grades[i,]$course))
+}
+
+
+# Print the predicted grades matrix
+print(predicted_grades)
+
+
+# Calculate MSE for observed (non-NA) grades
+observed_indices <- which(!is.na(grades))
+mse <- mean((predicted_grades$grade - data[test_indices,]$grade)^2)
+cat("Mean Squared Error (MSE):", mse, "\n")
+
+
+
+```
+
+```{r}
+actual <- data[test_indices,]$grade
+predictions <- predicted_grades$grade
+plot(actual, predictions, xlab = "Actual Grades", ylab = "Predicted Grades", 
+     main = "Predicted vs Actual Grades", pch = 16, col = "blue", xlim = c(0,100), ylim = c(0,100))
+abline(0, 1, col = "red")
+
+max(predictions)
+max(actual)
+
+line.lm <- lm(predictions~actual)
+abline(line.lm, col = "green")
+```
+
+
+```{r}
+
+library(recosystem)
+
 # Example data: students, courses, and grades (with NAs for missing grades)
 students <- c("Student1", "Student2", "Student3", "Student4")
 courses <- c("Course1", "Course2", "Course3")
 grades <- matrix(c(90, NA, 80, 70, 85, NA, NA, 95, 100, 60, NA, 90), nrow = 4, byrow = TRUE)
 rownames(grades) <- students
 colnames(grades) <- courses
-
-
 
 # Convert the matrix into a data frame for recosystem
 data <- data.frame(
@@ -1172,19 +1255,10 @@ colnames(predicted_grades) <- courses
 # Print the predicted grades matrix
 print(predicted_grades)
 
-
 # Calculate MSE for observed (non-NA) grades
 observed_indices <- which(!is.na(grades))
 mse <- mean((predicted_grades[observed_indices] - grades[observed_indices])^2)
 cat("Mean Squared Error (MSE):", mse, "\n")
 
-
-grades
-data
-predicted_grades
-```
-
-```{r}
-library(NMF)
 ```
 
