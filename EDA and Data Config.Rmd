@@ -1211,6 +1211,20 @@ line.lm <- lm(predictions~actual)
 abline(line.lm, col = "green")
 ```
 
+```{r}
+residuals <- actual - predictions
+plot(predictions, residuals, xlab = "Predicted Grades", ylab = "Residuals", 
+     main = "Residual Plot", pch = 16, col = "blue")
+abline(h = 0, col = "red")
+
+line.lm <- lm(residuals~predictions)
+abline(line.lm, col = "green")
+```
+
+```{r}
+qqnorm(residuals, main = "Normal Q-Q Plot of Residuals")
+qqline(residuals, col = "red")
+```
 
 ```{r}
 
