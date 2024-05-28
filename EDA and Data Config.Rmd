@@ -1120,6 +1120,66 @@ mse
 subset(studentgrades, Major.1 == "DATA" | Major.2== "DATA" | Minor=="DATA")
 ```
 
+```{r Trying less predictors}
+# Getting list of students wanted
+studs <- studentgrades[!is.na(studentgrades$STAT.230)&!is.na(studentgrades$MATH.101)&!is.na(studentgrades$COSC.221),]$Student_ID
+
+
+
+data <- data.frame(student = character(), course=character(), grade=double())
+for(id in studs){
+  data <- rbind(data, list(id,"STAT.230",studentgrades[studentgrades$Student_ID==id,"STAT.230"]))
+  data <- rbind(data, list(id,"MATH.101",studentgrades[studentgrades$Student_ID==id,"MATH.101"]))
+  data <- rbind(data, list(id,"COSC.221",studentgrades[studentgrades$Student_ID==id,"COSC.221"]))
+}
+
+colnames(data) <- c("student","course","grade")
+
+data <- na.omit(data)  # Remove rows with NA ratings
+
+# Split into obj course and not
+data_obj <- data[data$course=="STAT.230",]
+data_non <- data[!data$course=="STAT.230",]
+
+# Creating the testing set from obj course
+n_rows <- nrow(data_obj)
+
+train_indices <- sample(1:n_rows, 0.9 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+data <- rbind(data_obj[test_indices,], data_obj[train_indices,],data_non)
+
+
+# Factoring data
+data[] <- lapply(data, function(x) {
+  if (is.character(x)) {
+    as.numeric(factor(x))
+  } else {
+    x
+  }
+})
+
+obj_course <- data[1,2]
+```
+
+```{r}
+#studs
+# Create an empty plot
+plot(NA, xlim=c(1, length(unique(df$course_name))), ylim = range(data$grade),
+     xlab = "Course Name", ylab = "Course Grade", type = "n", xaxt = "n")
+
+# Customize x-axis with course names
+axis(1, at = 1:length(unique(data$course)), labels = unique(data$course))
+
+# Plot lines for each student
+for (ids in data[data$grade<= 70 & data$grade >= 69 & data$course==obj_course,]$student) {
+  student_data <- data[data$student == ids, ]
+  course_indices <- as.numeric(factor(student_data$course, levels = unique(data$course)))
+  lines(course_indices, student_data$grade, type = "b", col = ids, lwd = 2, pch = 19)
+}
+```
+
+
 ```{r Dataset creation for MF}
 # Getting list of students wanted
 studs <- studentgrades[!is.na(studentgrades$STAT.230),]$Student_ID
@@ -1144,7 +1204,7 @@ data_non <- data[!data$course=="STAT.230",]
 # Creating the testing set from obj course
 n_rows <- nrow(data_obj)
 
-train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+train_indices <- sample(1:n_rows, 0.9 * n_rows)  # 80% of rows for training
 test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
 
 data <- rbind(data_obj[test_indices,], data_obj[train_indices,],data_non)
@@ -1209,6 +1269,9 @@ abline(0, 1, col = "red")
 
 line.lm <- lm(predictions~actual)
 abline(line.lm, col = "green")
+
+mse <- mean((predictions - actual)^2)
+cat("Mean Squared Error (MSE):", mse, "\n")
 ```
 
 ```{r}
@@ -1227,59 +1290,25 @@ qqline(residuals, col = "red")
 ```
 
 ```{r}
-
-library(recosystem)
-
-# Example data: students, courses, and grades (with NAs for missing grades)
-students <- c("Student1", "Student2", "Student3", "Student4")
-courses <- c("Course1", "Course2", "Course3")
-grades <- matrix(c(90, NA, 80, 70, 85, NA, NA, 95, 100, 60, NA, 90), nrow = 4, byrow = TRUE)
-rownames(grades) <- students
-colnames(grades) <- courses
-
-# Convert the matrix into a data frame for recosystem
-data <- data.frame(
-  user = rep(1:nrow(grades), times = ncol(grades)),
-  item = rep(1:ncol(grades), each = nrow(grades)),
-  rating = as.vector(t(grades))
-)
-data <- na.omit(data)  # Remove rows with NA ratings
-
-# Create a Reco object
-r <- Reco()
-
-# Define the training set
-train_set <- data_memory(user_index = data$user, item_index = data$item, rating = data$rating)
-
-# Train the model with ALS
-r$train(train_set, opts = list(dim = 10, costp_l2 = 0.1, costq_l2 = 0.1, lrate = 0.1, niter = 20))
-
-
-# Initialize the matrix to store predicted grades
-predicted_grades <- matrix(NA, nrow = nrow(grades), ncol = ncol(grades))
-
-# Predict missing values
-for (i in 1:nrow(grades)) {
-  for (j in 1:ncol(grades)) {
-    if (is.na(grades[i, j])) {
-      predicted_grades[i, j] <- r$predict(data_memory(user_index = i, item_index = j))
-    } else {
-      predicted_grades[i, j] <- grades[i, j]
-    }
+# returns the number of times a course has been taken by students who have also taken stat 230
+ids <- unique(df_bsc[df_bsc$COURSE_CODE=="STAT.230",]$STUD_NO_ANONYMOUS)
+courses <- unique(df_bsc[df_bsc$STUD_NO_ANONYMOUS %in% ids,]$COURSE_CODE)
+new_courses <- character(0)
+for(i in 1:length(courses)){
+  if(strsplit(courses[i], split = ".", fixed = TRUE)[[1]][2] < 300){
+    new_courses <- append(new_courses, courses[i])
   }
 }
 
-# Convert the predicted grades back to the original format
-rownames(predicted_grades) <- students
-colnames(predicted_grades) <- courses
+courses_taken_bsc_stat230 <- table(df_bsc[df_bsc$STUD_NO_ANONYMOUS %in% ids & df_bsc$COURSE_CODE %in% new_courses,]$COURSE_CODE)
 
-# Print the predicted grades matrix
-print(predicted_grades)
 
-# Calculate MSE for observed (non-NA) grades
-observed_indices <- which(!is.na(grades))
-mse <- mean((predicted_grades[observed_indices] - grades[observed_indices])^2)
-cat("Mean Squared Error (MSE):", mse, "\n")
+sorted_courses_taken_bsc <- sort(courses_taken_bsc_stat230, decreasing = TRUE)
+sorted_courses_taken_bsc[sorted_courses_taken_bsc >= 25]
+# number of courses who have been taken by at least 25 people: 87
+length(sorted_courses_taken_bsc[sorted_courses_taken_bsc >= 25])
 
+
+strsplit("STAT.230", split = ".", fixed = TRUE)[[1]][2]
 ```
 
