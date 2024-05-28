@@ -34,11 +34,14 @@ df_clean$HDR_CRS_LTTR_GRD <-
 # Create course code column
 df_clean$COURSE_CODE <- paste(df_clean$CRS_DPT_CD, df_clean$CRS_NO, sep = ".")
 df_clean <- df_clean[,-(12:13)]
-df <- subset(df, HDR_CRS_PCT_GRD < 999)
-df_clean <- subset(df_clean, HDR_CRS_PCT_GRD < 999)
+# Removing all withdrawl grades
+df_clean <- df_clean[df_clean$HDR_CRS_PCT_GRD < 999,]
+# Changing all withdrawls (999.9) to -1 to ensure they're kept in the data
+#df_clean$HDR_CRS_PCT_GRD[df_clean$HDR_CRS_PCT_GRD == 999.9] <- -1
+
+
 
 # Removing 2023 grades (not included) [also does nothing bc ^ cleans it out]
-df <- subset(df, SEC_SES_YR < 2022.5)
 df_clean <- subset(df_clean, SEC_SES_YR < 2022.5)
 
 # Subsetting only BSc students
@@ -1304,11 +1307,205 @@ courses_taken_bsc_stat230 <- table(df_bsc[df_bsc$STUD_NO_ANONYMOUS %in% ids & df
 
 
 sorted_courses_taken_bsc <- sort(courses_taken_bsc_stat230, decreasing = TRUE)
-sorted_courses_taken_bsc[sorted_courses_taken_bsc >= 25]
+course_names <- sorted_courses_taken_bsc[sorted_courses_taken_bsc >= 250]
 # number of courses who have been taken by at least 25 people: 87
-length(sorted_courses_taken_bsc[sorted_courses_taken_bsc >= 25])
+length(sorted_courses_taken_bsc[sorted_courses_taken_bsc >= 250])
 
 
 strsplit("STAT.230", split = ".", fixed = TRUE)[[1]][2]
 ```
 
+
+```{r missForest Impute on some courses}
+# preparing all student grades with stat230
+stat230grades <- studentgrades[!is.na(studentgrades$STAT.230),c("Student_ID","MATH.100","MATH.101","STAT.230","MATH.200","MATH.221","COSC.211","COSC.222","COSC.221")]
+stat230grades
+
+library(missForest)
+library(randomForest)
+
+n_rows <- nrow(stat230grades)
+
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+
+
+stat230.imputed <- missForest(stat230grades[,2:9])$ximp
+
+stat230.rf <- randomForest(STAT.230~., data=stat230.imputed[train_indices,])
+stat230.pred <- predict(stat230.rf, newdata = stat230.imputed[test_indices,])
+
+stat230.real <- stat230grades[test_indices,]$STAT.230
+
+# MSE value to compare to other models
+mse <- mean((stat230.pred - stat230.real)^2)
+mse
+```
+
+```{r missForest Impute on all courses}
+# returns the number of times a course has been taken by students who have also taken stat 230
+ids <- unique(df_bsc[df_bsc$COURSE_CODE=="STAT.230",]$STUD_NO_ANONYMOUS)
+courses <- unique(df_bsc[df_bsc$STUD_NO_ANONYMOUS %in% ids,]$COURSE_CODE)
+new_courses <- character(0)
+for(i in 1:length(courses)){
+  if(strsplit(courses[i], split = ".", fixed = TRUE)[[1]][2] < 300){
+    new_courses <- append(new_courses, courses[i])
+  }
+}
+
+courses_taken_bsc_stat230 <- table(df_bsc[df_bsc$STUD_NO_ANONYMOUS %in% ids & df_bsc$COURSE_CODE %in% new_courses,]$COURSE_CODE)
+
+
+sorted_courses_taken_bsc <- sort(courses_taken_bsc_stat230, decreasing = TRUE)
+course_names <- sorted_courses_taken_bsc[sorted_courses_taken_bsc >= 500]
+
+
+
+set.seed(45)
+
+# of the same year and below
+# preparing all student grades with stat230
+course_names <- dimnames(course_names)[[1]]
+
+
+stat230grades <- studentgrades[!is.na(studentgrades$STAT.230),colnames(studentgrades) %in% course_names]
+stat230grades
+
+library(missForest)
+library(randomForest)
+
+n_rows <- nrow(stat230grades)
+
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+
+
+stat230.imputed <- missForest(stat230grades[,-1])$ximp
+
+stat230.rf <- randomForest(STAT.230~., data=stat230.imputed[train_indices,])
+stat230.pred <- predict(stat230.rf, newdata = stat230.imputed[test_indices,])
+
+stat230.real <- stat230grades[test_indices,]$STAT.230
+
+# MSE value to compare to other models
+rmse <- sqrt(mean((stat230.pred - stat230.real)^2))
+rmse
+```
+
+```{r}
+actual <- stat230.real
+predictions <- stat230.pred
+plot(actual, predictions, xlab = "Actual Grades", ylab = "Predicted Grades", 
+     main = "Predicted vs Actual Grades", pch = 16, col = "blue", xlim = c(0,100), ylim = c(0,100))
+abline(0, 1, col = "red")
+abline(h = 50, col = "pink", lty = 2)
+abline(h = 60, col = "pink", lty = 2)
+abline(h = 70, col = "pink", lty = 2)# pink dashed line
+
+abline(v = 50, col = "pink", lty = 2)
+abline(v = 60, col = "pink", lty = 2)
+abline(v = 70, col = "pink", lty = 2)
+
+line.lm <- lm(predictions~actual)
+abline(line.lm, col = "green")
+
+mse <- mean((predictions - actual)^2)
+cat("Mean Squared Error (MSE):", mse, "\n")
+
+
+#sum(predictions<50)
+#sum(actual<50)
+```
+
+```{r}
+residuals <- actual - predictions
+plot(predictions, residuals, xlab = "Predicted Grades", ylab = "Residuals", 
+     main = "Residual Plot", pch = 16, col = "blue")
+abline(h = 0, col = "red")
+
+line.lm <- lm(residuals~predictions)
+abline(line.lm, col = "green")
+```
+
+```{r}
+qqnorm(residuals, main = "Normal Q-Q Plot of Residuals")
+qqline(residuals, col = "red")
+```
+
+```{r missForest Impute on all courses TESTING FOR RANDOM COURSES}
+# returns the number of times a course has been taken by students who have also taken xxxx.xxx
+ids <- unique(df_bsc[df_bsc$COURSE_CODE=="DATA.101",]$STUD_NO_ANONYMOUS)
+courses <- unique(df_bsc[df_bsc$STUD_NO_ANONYMOUS %in% ids,]$COURSE_CODE)
+new_courses <- character(0)
+for(i in 1:length(courses)){
+  if(strsplit(courses[i], split = ".", fixed = TRUE)[[1]][2] < 300){
+    new_courses <- append(new_courses, courses[i])
+  }
+}
+
+courses_taken_bsc_stat230 <- table(df_bsc[df_bsc$STUD_NO_ANONYMOUS %in% ids & df_bsc$COURSE_CODE %in% new_courses,]$COURSE_CODE)
+
+
+sorted_courses_taken_bsc <- sort(courses_taken_bsc_stat230, decreasing = TRUE)
+course_names <- sorted_courses_taken_bsc[sorted_courses_taken_bsc >= 50]
+
+
+
+set.seed(45)
+
+# of the same year and below
+# preparing all student grades with stat230
+course_names <- dimnames(course_names)[[1]]
+
+
+stat230grades <- studentgrades[!is.na(studentgrades$DATA.101),colnames(studentgrades) %in% course_names]
+stat230grades
+
+library(missForest)
+library(randomForest)
+
+n_rows <- nrow(stat230grades)
+
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+
+
+stat230.imputed <- missForest(stat230grades[,-1])$ximp
+
+stat230.rf <- randomForest(DATA.101~., data=stat230.imputed[train_indices,])
+stat230.pred <- predict(stat230.rf, newdata = stat230.imputed[test_indices,])
+
+stat230.real <- stat230grades[test_indices,]$DATA.101
+
+# MSE value to compare to other models
+rmse <- sqrt(mean((stat230.pred - stat230.real)^2))
+rmse
+```
+
+```{r}
+actual <- stat230.real
+predictions <- stat230.pred
+plot(actual, predictions, xlab = "Actual Grades", ylab = "Predicted Grades", 
+     main = "Predicted vs Actual Grades", pch = 16, col = "blue", xlim = c(0,100), ylim = c(0,100))
+abline(0, 1, col = "red")
+abline(h = 50, col = "pink", lty = 2)
+abline(h = 60, col = "pink", lty = 2)
+abline(h = 70, col = "pink", lty = 2)# pink dashed line
+
+abline(v = 50, col = "pink", lty = 2)
+abline(v = 60, col = "pink", lty = 2)
+abline(v = 70, col = "pink", lty = 2)
+
+line.lm <- lm(predictions~actual)
+abline(line.lm, col = "green")
+
+mse <- mean((predictions - actual)^2)
+cat("Mean Squared Error (MSE):", mse, "\n")
+
+
+sum(predictions<50)
+sum(actual<50)
+```
