@@ -1436,7 +1436,7 @@ qqline(residuals, col = "red")
 
 ```{r missForest Impute on all courses TESTING FOR RANDOM COURSES}
 # returns the number of times a course has been taken by students who have also taken xxxx.xxx
-ids <- unique(df_bsc[df_bsc$COURSE_CODE=="DATA.101",]$STUD_NO_ANONYMOUS)
+ids <- unique(df_bsc[df_bsc$COURSE_CODE=="COSC.221",]$STUD_NO_ANONYMOUS)
 courses <- unique(df_bsc[df_bsc$STUD_NO_ANONYMOUS %in% ids,]$COURSE_CODE)
 new_courses <- character(0)
 for(i in 1:length(courses)){
@@ -1460,7 +1460,7 @@ set.seed(45)
 course_names <- dimnames(course_names)[[1]]
 
 
-stat230grades <- studentgrades[!is.na(studentgrades$DATA.101),colnames(studentgrades) %in% course_names]
+stat230grades <- studentgrades[!is.na(studentgrades$COSC.221),colnames(studentgrades) %in% course_names]
 stat230grades
 
 library(missForest)
@@ -1475,10 +1475,10 @@ test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
 
 stat230.imputed <- missForest(stat230grades[,-1])$ximp
 
-stat230.rf <- randomForest(DATA.101~., data=stat230.imputed[train_indices,])
+stat230.rf <- randomForest(COSC.221~., data=stat230.imputed[train_indices,])
 stat230.pred <- predict(stat230.rf, newdata = stat230.imputed[test_indices,])
 
-stat230.real <- stat230grades[test_indices,]$DATA.101
+stat230.real <- stat230grades[test_indices,]$COSC.221
 
 # MSE value to compare to other models
 rmse <- sqrt(mean((stat230.pred - stat230.real)^2))
