@@ -1358,7 +1358,7 @@ courses_taken_bsc_stat230 <- table(df_bsc[df_bsc$STUD_NO_ANONYMOUS %in% ids & df
 
 
 sorted_courses_taken_bsc <- sort(courses_taken_bsc_stat230, decreasing = TRUE)
-course_names <- sorted_courses_taken_bsc[sorted_courses_taken_bsc >= 500]
+course_names <- sorted_courses_taken_bsc[sorted_courses_taken_bsc >= 190]
 
 
 
@@ -1509,3 +1509,24 @@ cat("Mean Squared Error (MSE):", mse, "\n")
 sum(predictions<50)
 sum(actual<50)
 ```
+
+```{r Pairwise Correlation}
+cor(studentgrades$PSYO.111,studentgrades$BIOL.116, method="pearson", use = "complete.obs")
+
+cordata <- cor(studentgrades[,c(6,25)], use = "complete.obs")
+
+corrs <- data.frame(courses=NA, corr=NA)
+for(i in 6:ncol(studentgrades)){
+  if(nrow(studentgrades[!is.na(studentgrades$BIOL.204) & !is.na(studentgrades[,i]),]) >=3 )
+  corrs <- rbind(corrs, c(colnames(studentgrades)[i],cor(studentgrades$BIOL.204, studentgrades[,i], use = "complete.obs")))
+}
+corrs <- na.omit(corrs)
+
+corrs[order(corrs$corr, decreasing = TRUE),]
+```
+
+```{r}
+studentgrades[!is.na(studentgrades$STAT.230) & !is.na(studentgrades$HIST.115),c("STAT.230","HIST.115")]
+```
+
+
