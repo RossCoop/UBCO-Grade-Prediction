@@ -46,7 +46,7 @@ df_clean <- subset(df_clean, SEC_SES_YR < 2022.5)
 
 # Subsetting only BSc students
 df_bsc <- df_clean
-df_bsc <- df_clean[df_clean$DEGR_PGM_CD=="BSC-O",]
+#df_bsc <- df_clean[df_clean$DEGR_PGM_CD=="BSC-O",]
 
 
 df_bsc
@@ -58,7 +58,8 @@ unique(df_clean$COURSE_CODE)|>length()
 courses_taken_bsc <- table(df_bsc$COURSE_CODE)
 
 
-sorted_courses_taken_bsc <- sort(courses_taken_bsc, decreasing = TRUE)[1:200]
+#sorted_courses_taken_bsc <- sort(courses_taken_bsc, decreasing = TRUE)[1:200]
+sorted_courses_taken_bsc <- sort(courses_taken_bsc, decreasing = TRUE)
 sorted_courses_taken_bsc
 
 barplot(sorted_courses_taken_bsc)
@@ -1511,22 +1512,32 @@ sum(actual<50)
 ```
 
 ```{r Pairwise Correlation}
-cor(studentgrades$PSYO.111,studentgrades$BIOL.116, method="pearson", use = "complete.obs")
+library(bnlearn)
+suppressWarnings({
+pc <- pc.stable(studentgrades[,-(1:5)], undirected = FALSE)
+pc$arcs # 10 arcs
 
-cordata <- cor(studentgrades[,c(6,25)], use = "complete.obs")
+gs <- gs(studentgrades[,-(1:5)], undirected = FALSE)
+gs$arcs # 10 arcs
 
-corrs <- data.frame(courses=NA, corr=NA)
-for(i in 6:ncol(studentgrades)){
-  if(nrow(studentgrades[!is.na(studentgrades$BIOL.204) & !is.na(studentgrades[,i]),]) >=3 )
-  corrs <- rbind(corrs, c(colnames(studentgrades)[i],cor(studentgrades$BIOL.204, studentgrades[,i], use = "complete.obs")))
-}
-corrs <- na.omit(corrs)
+iamb <- iamb(studentgrades[,-(1:5)])
+iamb$arcs # 75 arc... some potential
 
-corrs[order(corrs$corr, decreasing = TRUE),]
+hc <- tabu(studentgrades[,-(1:5)], score = "aic")
+hc$arcs
+
+mmhc <- h2pc(studentgrades[,-(1:5)])
+mmhc$arcs
+
+mmpc <- mmpc(studentgrades[,-(1:5)])
+mmpc$arcs # lots of pairs but no substance
+})
 ```
 
 ```{r}
-studentgrades[!is.na(studentgrades$STAT.230) & !is.na(studentgrades$HIST.115),c("STAT.230","HIST.115")]
-```
+chow <- chow.liu(studentgrades[,-(1:5)])
+chow$arcs[chow$arcs[,1]=="STAT.230"]
 
+mmpc$arcs[mmpc$arcs[,1]=="STAT.230"]
+```
 
