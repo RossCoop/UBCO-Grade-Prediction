@@ -1363,7 +1363,7 @@ course_names <- sorted_courses_taken_bsc[sorted_courses_taken_bsc >= 190]
 
 
 
-set.seed(45)
+#set.seed(45)
 
 # of the same year and below
 # preparing all student grades with stat230
@@ -1393,6 +1393,8 @@ stat230.real <- stat230grades[test_indices,]$STAT.230
 # MSE value to compare to other models
 rmse <- sqrt(mean((stat230.pred - stat230.real)^2))
 rmse
+mse <- mean((stat230.pred - stat230.real)^2)
+mse
 ```
 
 ```{r}
@@ -1461,7 +1463,10 @@ set.seed(45)
 course_names <- dimnames(course_names)[[1]]
 
 
-stat230grades <- studentgrades[!is.na(studentgrades$COSC.221),colnames(studentgrades) %in% course_names]
+
+course_names <- c("COSC.121","MATH.200","MATH.221","COSC.221","COSC.211","MATH.101","COSC.222","ECON.101","COSC.111","PSYO.111","STAT.230")
+
+stat230grades <- studentgrades[!is.na(studentgrades$STAT.230),colnames(studentgrades) %in% course_names]
 stat230grades
 
 library(missForest)
@@ -1476,14 +1481,16 @@ test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
 
 stat230.imputed <- missForest(stat230grades[,-1])$ximp
 
-stat230.rf <- randomForest(COSC.221~., data=stat230.imputed[train_indices,])
+stat230.rf <- randomForest(STAT.230~., data=stat230.imputed[train_indices,])
 stat230.pred <- predict(stat230.rf, newdata = stat230.imputed[test_indices,])
 
-stat230.real <- stat230grades[test_indices,]$COSC.221
+stat230.real <- stat230grades[test_indices,]$STAT.230
 
 # MSE value to compare to other models
 rmse <- sqrt(mean((stat230.pred - stat230.real)^2))
 rmse
+mse <- mean((stat230.pred - stat230.real)^2)
+mse
 ```
 
 ```{r}
@@ -1541,3 +1548,59 @@ chow$arcs[chow$arcs[,1]=="STAT.230"]
 mmpc$arcs[mmpc$arcs[,1]=="STAT.230"]
 ```
 
+
+```{r}
+library(e1071)
+library(missForest)
+
+course_names <- c("COSC.121","MATH.200","MATH.221","COSC.221","COSC.211","MATH.101","COSC.222","ECON.101","COSC.111","PSYO.111","STAT.230")
+
+grades <- studentgrades[!is.na(studentgrades$STAT.230),colnames(studentgrades) %in% course_names]
+
+grades.imputed <- missForest(grades)$ximp
+
+
+n_rows <- nrow(grades)
+
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+
+svm_model <- svm(STAT.230~., data=grades.imputed[train_indices,])
+
+#opt_svm <- tune(svm_model, STAT.230~., data=grades[train_indices,],ranges=list(elsilon=seq(0,1,0.1), cost=1:100))
+
+pred_svm <- predict(svm_model, data=grades.imputed[test_indices,])
+length(pred_svm)
+
+grades.real <- grades[test_indices,"STAT.230"]
+
+rmse <- sqrt(mean((pred_svm - grades.real)^2))
+rmse
+mse <- mean((pred_svm - grades.real)^2)
+mse
+```
+
+```{r}
+actual <- grades.real
+predictions <- pred_svm
+plot(actual, predictions, xlab = "Actual Grades", ylab = "Predicted Grades", main = "Predicted vs Actual Grades", pch = 16, col = "blue", xlim = c(0,100), ylim = c(0,100))
+abline(0, 1, col = "red")
+abline(h = 50, col = "pink", lty = 2)
+abline(h = 60, col = "pink", lty = 2)
+abline(h = 70, col = "pink", lty = 2)# pink dashed line
+
+abline(v = 50, col = "pink", lty = 2)
+abline(v = 60, col = "pink", lty = 2)
+abline(v = 70, col = "pink", lty = 2)
+
+line.lm <- lm(predictions~actual)
+abline(line.lm, col = "green")
+
+mse <- mean((predictions - actual)^2)
+cat("Mean Squared Error (MSE):", mse, "\n")
+
+
+sum(predictions<50)
+sum(actual<50)
+```
