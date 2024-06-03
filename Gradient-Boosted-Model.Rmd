@@ -22,14 +22,15 @@ F_0(x) = \arg\min_{c} \sum_{i=1}^{N} L(y_i, c)
 \]
 
 2. **For \(m = 1\) to \(M\) (number of boosting iterations)**:
-   - Compute the residuals \(r_i^m\):
+   - Compute the residuals \(r_i^m\)
+   - For squared error loss, this simplifies to:
 
 \[
-r_i^m = -\left[\frac{\partial L(y_i, F(x_i))}{\partial F(x_i)}\right]_{F(x) = F_{m-1}(x)}
+r_i^m = y_i - F_{m-1}(x_i)
 \]
 
    - Fit a base learner \(h_m(x)\) to the residuals.
-   - Update the model:
+   - Update the model via gradient decent:
 
 \[
 F_{m}(x) = F_{m-1}(x) + \nu h_m(x)
@@ -42,10 +43,18 @@ F_{m}(x) = F_{m-1}(x) + \nu h_m(x)
 \]
 
 
+What we are controlling and changing:
+  - Boosting iterations (ntrees)
+  - Learning rate (shrinkage parameter)
 
 
+![](./GBM pics/fig3.png)
+Figure 3: Out-of-sample predictive performance by number of iterations and shrinkage. Smaller values of the shrinkage parameter offer improved predictive performance, but with decreasing marginal improvement. (from vignette)
 
+![](./GBM pics/fig4.png)
+Figure 4: Out-of-sample predictive performance of four methods of selecting the optimal number of iterations. The vertical axis plots performance relative the best. The boxplots indicate relative performance across thirteen real datasets from the UCI repository. (from vignette)
 
+The vignette recommends to use 5 or 10-fold CV if you can afford the computation time. Otherwise OOB is a good conservative choice.
 
 ```{r GBM data prep}
 ### This first removes all courses which are in higher levels (eg. if predicting on STAT.230, 300's and 400's are removed)
@@ -58,7 +67,7 @@ COI <- "STAT.230"
 coursegrades <- studentgrades[!is.na(studentgrades[,COI]),-1:-5]
 
 # remove all stat 230 < 60%
-coursegrades <- coursegrades[coursegrades$STAT.230 >=60, ]
+coursegrades <- coursegrades[coursegrades$STAT.230 >= 60, ]
 
 
 # dropping columns that are very sparse
@@ -72,7 +81,7 @@ for (i in 1:ncol(coursegrades)) {
 coursegrades <- coursegrades[,-courses]
 
 
-# figuring out the year level of each course...
+# Removing all course columns of higher years
 YOI <- as.integer(substr(strsplit(COI, split = ".", fixed = TRUE)[[1]][2],1,1))
 
 column_names <- colnames(coursegrades)
@@ -85,7 +94,7 @@ cols_to_keep <- column_names[column_digits <= YOI]
 
 # All columns in the same year or below
 coursegrades <- coursegrades[, colnames(coursegrades) %in% cols_to_keep]
-coursegrades
+
 ```
 
 
@@ -99,47 +108,63 @@ library(gbm)
 
 gbm_params <- list(
   distribution = "gaussian",  # Specify the distribution for regression
-  n.trees = 250,               # Number of trees (iterations)
+  n.trees = 200,               # Number of trees (iterations)
   interaction.depth = 4,       # Maximum depth of trees
-  shrinkage = 0.05,             # Learning rate (shrinkage)
+  shrinkage = 0.05,            # Learning rate (shrinkage)
   bag.fraction = 0.5,          # Fraction of training data used for each tree
   train.fraction = 1.0,        # Fraction of training data used for training (1.0 for full dataset)
   n.minobsinnode = 10          # Minimum number of observations in terminal nodes
 )
 
-
-
+# Running model first time on base params
 gbm_model <- gbm(STAT.230 ~ ., data = coursegrades, distribution = gbm_params$distribution,
                  n.trees = gbm_params$n.trees, interaction.depth = gbm_params$interaction.depth,
                  shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
                  train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 5)
 
-ntrees <- gbm.perf(gbm_model,method="OOB")[1]
+ntrees <- gbm.perf(gbm_model,method="cv")[1]
 
 # Print the summary of the trained model
 print(summary(gbm_model))
 
-# Make predictions on new data
-# Assuming 'new_data' is your new dataframe for prediction
-# predictions <- predict(gbm_model, newdata = coursegrades[test_indices,], n.trees = gbm_params$n.trees)
 
-
-# Print the predictions
-#predictions
-
-
-
+# Running model a second time with optimal # of trees
 gbm_model <- gbm(STAT.230 ~ ., data = coursegrades[train_indices,], distribution = gbm_params$distribution,
                  n.trees = ntrees, interaction.depth = gbm_params$interaction.depth,
                  shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
                  train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 5)
 
 
+
+# Make predictions on new data
 predictions <- predict(gbm_model, newdata = coursegrades[test_indices,], n.trees = ntrees)
 
 mse <- mean((predictions - coursegrades[test_indices,COI])^2)
 sqrt(mse)
 ```
+
+
+```{r GBM cv}
+gbm_params <- list(
+  distribution = "gaussian",  # Specify the distribution for regression
+  n.trees = 200,               # Number of trees (iterations)
+  interaction.depth = 4,       # Maximum depth of trees
+  shrinkage = 0.05,            # Learning rate (shrinkage)
+  bag.fraction = 0.5,          # Fraction of training data used for each tree
+  train.fraction = 1.0,        # Fraction of training data used for training (1.0 for full dataset)
+  n.minobsinnode = 10          # Minimum number of observations in terminal nodes
+)
+
+# Running model first time on base params
+gbm_model <- gbm(STAT.230 ~ ., data = coursegrades, distribution = gbm_params$distribution,
+                 n.trees = gbm_params$n.trees, interaction.depth = gbm_params$interaction.depth,
+                 shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
+                 train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 5)
+
+
+gbm.perf(gbm_model, method="cv")
+```
+
 
 ```{r}
 actual <- coursegrades[test_indices,]$STAT.230
@@ -147,8 +172,6 @@ plot(actual, predictions, xlab = "Actual Grades", ylab = "Predicted Grades",
      main = "Predicted vs Actual Grades", pch = 16, col = "blue", xlim = c(0,100), ylim = c(0,100))
 abline(0, 1, col = "red")
 
-max(predictions)
-max(actual)
 
 line.lm <- lm(predictions~actual)
 abline(line.lm, col = "green")
