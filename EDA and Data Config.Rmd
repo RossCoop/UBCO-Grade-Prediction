@@ -1557,7 +1557,7 @@ course_names <- c("COSC.121","MATH.200","MATH.221","COSC.221","COSC.211","MATH.1
 
 grades <- studentgrades[!is.na(studentgrades$STAT.230),colnames(studentgrades) %in% course_names]
 
-grades.imputed <- missForest(grades)$ximp
+#grades.imputed <- missForest(grades)$ximp
 
 
 n_rows <- nrow(grades)
@@ -1565,13 +1565,19 @@ n_rows <- nrow(grades)
 train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
 test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
 
+xtrain <- grades[train_indices,!names(grades) %in% c("STAT.230")]
+ytrain <- grades[train_indices,"STAT.230"]
+xtest <- grades[test_indices,!names(grades) %in% c("STAT.230")]
+ytest <- grades[test_indices,"STAT.230"]
 
-svm_model <- svm(STAT.230~., data=grades.imputed[train_indices,])
+
+svm_model <- svm(STAT.230~., data=grades[train_indices,])
 
 #opt_svm <- tune(svm_model, STAT.230~., data=grades[train_indices,],ranges=list(elsilon=seq(0,1,0.1), cost=1:100))
 
-pred_svm <- predict(svm_model, data=grades.imputed[test_indices,])
+pred_svm <- predict(svm_model, data=grades[test_indices[1],])
 length(pred_svm)
+pred_svm
 
 grades.real <- grades[test_indices,"STAT.230"]
 
@@ -1604,3 +1610,134 @@ cat("Mean Squared Error (MSE):", mse, "\n")
 sum(predictions<50)
 sum(actual<50)
 ```
+
+```{r SVM via trainControl}
+library(e1071)
+library(missForest)
+library(kernlab)  # install if necessary using 'install.packages'
+library(caret) # install if necessary using 'install.packages'
+
+course_names <- c("COSC.121","MATH.200","MATH.221","COSC.221","COSC.211","MATH.101","COSC.222","ECON.101","COSC.111","PSYO.111","STAT.230")
+
+grades <- studentgrades[!is.na(studentgrades$STAT.230),colnames(studentgrades) %in% course_names]
+#grades <- studentgrades[!is.na(studentgrades$STAT.230),]
+
+grades <- missForest(grades)$ximp
+
+
+n_rows <- nrow(grades)
+
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+xtrain <- grades[train_indices,!names(grades) %in% c("STAT.230")]
+ytrain <- grades[train_indices,"STAT.230"]
+xtest <- grades[test_indices,!names(grades) %in% c("STAT.230")]
+ytest <- grades[test_indices,"STAT.230"]
+
+
+#To train the model we will use k-fold cross validation, with k set to 5
+ctrl <- trainControl(method = "cv", number=5) 
+
+
+# Create a grid of parameters to test and train the model with dimension 1
+SVRGridCoarse <- expand.grid(.sigma=c(0.001, 0.01, 0.1), .C=c(10,100,1000))
+SVRFitCoarse <- train(xtrain, ytrain, method="svmRadial", tuneGrid=SVRGridCoarse, trControl=ctrl, type="eps-svr")
+
+# Display results
+SVRFitCoarse
+
+ggplot(SVRFitCoarse)
+
+SVRFitCoarse$finalModel
+
+yPred <- predict(SVRFitCoarse$finalModel, xtest)
+```
+
+```{r}
+actual <- ytest
+predictions <- yPred
+plot(actual, predictions, xlab = "Actual Grades", ylab = "Predicted Grades", main = "Predicted vs Actual Grades", pch = 16, col = "blue", xlim = c(0,100), ylim = c(0,100))
+abline(0, 1, col = "red")
+abline(h = 50, col = "pink", lty = 2)
+abline(h = 60, col = "pink", lty = 2)
+abline(h = 70, col = "pink", lty = 2)# pink dashed line
+
+abline(v = 50, col = "pink", lty = 2)
+abline(v = 60, col = "pink", lty = 2)
+abline(v = 70, col = "pink", lty = 2)
+
+line.lm <- lm(predictions~actual)
+abline(line.lm, col = "green")
+
+mse <- mean((predictions - actual)^2)
+cat("Mean Squared Error (MSE):", mse, "\n")
+
+
+sum(predictions<50)
+sum(actual<50)
+```
+
+```{r Trying RFE... doesnt work on NA}
+library("dplyr")
+library("faux")
+library("DataExplorer")
+library("caret")
+library("randomForest")
+
+studentgrades.factor <- studentgrades %>%
+  # Save categorical features as factors
+  mutate_at(c("Student_ID", "Major.1", "Major.2", "Minor", "Honors"), 
+            as.factor)
+
+
+# Define the control using a random forest selection function
+control <- rfeControl(functions = rfFuncs, # random forest
+                      method = "repeatedcv", # repeated cv
+                      repeats = 5, # number of repeats
+                      number = 10) # number of folds
+
+n_rows <- nrow(studentgrades.factor)
+
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+xtrain <- studentgrades.factor[train_indices,!names(studentgrades.factor) %in% c("STAT.230")]
+ytrain <- studentgrades.factor[train_indices,"STAT.230"]
+xtest <- studentgrades.factor[test_indices,!names(studentgrades.factor) %in% c("STAT.230")]
+ytest <- studentgrades.factor[test_indices,"STAT.230"]
+
+# Run RFE
+result_rfe1 <- rfe(x = xtrain, 
+                   y = ytrain, 
+                   sizes = c(1:13),
+                   rfeControl = control)
+
+# Print the results
+result_rfe1
+
+# Print the selected features
+predictors(result_rfe1)
+
+# Print the results visually
+ggplot(data = result_rfe1, metric = "Accuracy") + theme_bw()
+ggplot(data = result_rfe1, metric = "Kappa") + theme_bw()
+```
+
+```{r LASSO feature selection}
+cv_5 <- trainControl(method="cv", number=5)
+lasso <- train(STAT.230 ~., data=studentgrades, method='lasso',  trControl=cv_5, na.action = na.exclude)
+```
+
+```{r Lasso..}
+library(glmnet)
+
+cv_model <- cv.glmnet(studentgrades$STAT.230~studentgrades[,-c(1,2,3,4,5,"STAT.230")], nfolds = 10,alpha=1)
+```
+
+
+```{r}
+cor(studentgrades$MATH.100,studentgrades$MATH.101, use = "complete.obs")
+```
+
+
