@@ -1,0 +1,157 @@
+---
+title: "Gradient Boosted Model Prediction"
+author: "Ross Cooper 54907605"
+date: "2024-06-03"
+output: html_document
+---
+
+# Loading in Data
+```{r}
+load(file="StudentGrades.RData")
+head(studentgrades)
+```
+
+# Gradient Boosted Model
+
+## Summary of the Boosting Process
+
+1. **Initialize the model** with a constant value, typically the mean of the target values for regression:
+
+\[ 
+F_0(x) = \arg\min_{c} \sum_{i=1}^{N} L(y_i, c)
+\]
+
+2. **For \(m = 1\) to \(M\) (number of boosting iterations)**:
+   - Compute the residuals \(r_i^m\):
+
+\[
+r_i^m = -\left[\frac{\partial L(y_i, F(x_i))}{\partial F(x_i)}\right]_{F(x) = F_{m-1}(x)}
+\]
+
+   - Fit a base learner \(h_m(x)\) to the residuals.
+   - Update the model:
+
+\[
+F_{m}(x) = F_{m-1}(x) + \nu h_m(x)
+\]
+
+3. **Final prediction** is the sum of all base learners:
+
+\[
+\hat{y} = F_M(x) = \sum_{m=1}^{M} \nu h_m(x)
+\]
+
+
+
+
+
+
+
+```{r GBM data prep}
+### This first removes all courses which are in higher levels (eg. if predicting on STAT.230, 300's and 400's are removed)
+### Then courses which have < 10 grades in them are removed (this is still by chance and may break) temp fix for NA courses in training set
+### GBM used on remaining courses to predict for the course of interest
+set.seed(5934)
+
+# time to remove all future year courses from prediction
+COI <- "STAT.230"
+coursegrades <- studentgrades[!is.na(studentgrades[,COI]),-1:-5]
+
+# remove all stat 230 < 60%
+coursegrades <- coursegrades[coursegrades$STAT.230 >=60, ]
+
+
+# dropping columns that are very sparse
+courses <- numeric(0)
+for (i in 1:ncol(coursegrades)) {
+  if(is.na(coursegrades[,i]) |> sum()  > nrow(coursegrades)*0.95){
+    courses <- c(courses,i)
+  }
+}
+
+coursegrades <- coursegrades[,-courses]
+
+
+# figuring out the year level of each course...
+YOI <- as.integer(substr(strsplit(COI, split = ".", fixed = TRUE)[[1]][2],1,1))
+
+column_names <- colnames(coursegrades)
+
+# Extract digits after the period in column names
+column_digits <- as.integer(sub("^[^.]+\\.([0-9]).*", "\\1", column_names))
+
+# Find columns with digits not matching the selected course year
+cols_to_keep <- column_names[column_digits <= YOI]
+
+# All columns in the same year or below
+coursegrades <- coursegrades[, colnames(coursegrades) %in% cols_to_keep]
+coursegrades
+```
+
+
+```{r GBM}
+set.seed(5934)
+n_rows <- nrow(coursegrades)
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+library(gbm)
+
+gbm_params <- list(
+  distribution = "gaussian",  # Specify the distribution for regression
+  n.trees = 250,               # Number of trees (iterations)
+  interaction.depth = 4,       # Maximum depth of trees
+  shrinkage = 0.05,             # Learning rate (shrinkage)
+  bag.fraction = 0.5,          # Fraction of training data used for each tree
+  train.fraction = 1.0,        # Fraction of training data used for training (1.0 for full dataset)
+  n.minobsinnode = 10          # Minimum number of observations in terminal nodes
+)
+
+
+
+gbm_model <- gbm(STAT.230 ~ ., data = coursegrades, distribution = gbm_params$distribution,
+                 n.trees = gbm_params$n.trees, interaction.depth = gbm_params$interaction.depth,
+                 shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
+                 train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 5)
+
+ntrees <- gbm.perf(gbm_model,method="OOB")[1]
+
+# Print the summary of the trained model
+print(summary(gbm_model))
+
+# Make predictions on new data
+# Assuming 'new_data' is your new dataframe for prediction
+# predictions <- predict(gbm_model, newdata = coursegrades[test_indices,], n.trees = gbm_params$n.trees)
+
+
+# Print the predictions
+#predictions
+
+
+
+gbm_model <- gbm(STAT.230 ~ ., data = coursegrades[train_indices,], distribution = gbm_params$distribution,
+                 n.trees = ntrees, interaction.depth = gbm_params$interaction.depth,
+                 shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
+                 train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 5)
+
+
+predictions <- predict(gbm_model, newdata = coursegrades[test_indices,], n.trees = ntrees)
+
+mse <- mean((predictions - coursegrades[test_indices,COI])^2)
+sqrt(mse)
+```
+
+```{r}
+actual <- coursegrades[test_indices,]$STAT.230
+plot(actual, predictions, xlab = "Actual Grades", ylab = "Predicted Grades", 
+     main = "Predicted vs Actual Grades", pch = 16, col = "blue", xlim = c(0,100), ylim = c(0,100))
+abline(0, 1, col = "red")
+
+max(predictions)
+max(actual)
+
+line.lm <- lm(predictions~actual)
+abline(line.lm, col = "green")
+```
+
+
