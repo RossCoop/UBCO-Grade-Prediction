@@ -60,8 +60,8 @@ courses_taken_bsc <- table(df_bsc$COURSE_CODE)
 
 #sorted_courses_taken_bsc <- sort(courses_taken_bsc, decreasing = TRUE)[1:200]
 sorted_courses_taken_bsc <- sort(courses_taken_bsc, decreasing = TRUE)
-sorted_courses_taken_bsc <- sorted_courses_taken_bsc[substr(names(sorted_courses_taken_bsc),1,4) %in% c("DATA","MATH",
-                                                   "COSC","STAT")]
+# sorted_courses_taken_bsc <- sorted_courses_taken_bsc[substr(names(sorted_courses_taken_bsc),1,4) %in% c("DATA","MATH",
+                                                   # "COSC","STAT")]
 
 barplot(sorted_courses_taken_bsc)
 # saving course names
@@ -1475,6 +1475,18 @@ cat("Mean Squared Error (MSE):", mse, "\n")
 sum(predictions<50)
 sum(actual<50)
 ```
+
+```{r}
+temp <-cbind(studentgrades$STAT.230,studentgrades$COSC.111) 
+temp <- temp[temp[,] > 50]
+temp <- na.omit(temp)
+cor(temp[,1],temp[,2] , use = "complete.obs")
+
+plot(studentgrades$STAT.230, studentgrades$BIOL.205)
+
+cor(studentgrades$STAT.230, studentgrades$BIOL.205, use = "complete.obs")
+```
+
 
 ```{r Structured Learning}
 library(bnlearn)

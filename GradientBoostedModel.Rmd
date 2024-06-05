@@ -100,7 +100,7 @@ coursegrades <- coursegrades[, colnames(coursegrades) %in% cols_to_keep]
 
 ## Iteration Graphs
 
-```{r GBM cv}
+```{r GBM Num Tree Graphs}
 library(gbm)
 
 gbm_params <- list(
@@ -120,8 +120,8 @@ gbm_model <- gbm(STAT.230 ~ ., data = coursegrades, distribution = gbm_params$di
                  train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 5)
 
 
-gbm.perf(gbm_model, method="cv")
-gbm.perf(gbm_model, method="OOB")
+print(gbm.perf(gbm_model, method="cv"))
+print(gbm.perf(gbm_model, method="OOB"))
 ```
 
 ## Model Training and Prediction
@@ -129,19 +129,19 @@ gbm.perf(gbm_model, method="OOB")
 ```{r GBM}
 set.seed(5934)
 n_rows <- nrow(coursegrades)
-train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+train_indices <- sample(1:n_rows, 0.85 * n_rows)  # 80% of rows for training
 test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
 
 library(gbm)
 
 gbm_params <- list(
-  distribution = "gaussian",  # Specify the distribution for regression
-  n.trees = 200,               # Number of trees (iterations)
-  interaction.depth = 4,       # Maximum depth of trees
-  shrinkage = 0.05,            # Learning rate (shrinkage)
+  distribution = "laplace",  # Specify the distribution for regression
+  n.trees = 1000,               # Number of trees (iterations)
+  interaction.depth = 5,       # Maximum depth of trees
+  shrinkage = 0.01,            # Learning rate (shrinkage)
   bag.fraction = 0.5,          # Fraction of training data used for each tree
   train.fraction = 1.0,        # Fraction of training data used for training (1.0 for full dataset)
-  n.minobsinnode = 10          # Minimum number of observations in terminal nodes
+  n.minobsinnode = 15          # Minimum number of observations in terminal nodes
 )
 
 # Running model first time on base params
@@ -151,7 +151,7 @@ gbm_model <- gbm(STAT.230 ~ ., data = coursegrades, distribution = gbm_params$di
                  train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 5)
 
 ntrees <- gbm.perf(gbm_model,method="cv")[1]
-
+# ntrees <- 1000
 
 
 
@@ -187,106 +187,52 @@ abline(line.lm, col = "green")
 ```
 
 
-## GBM Classification
-```{r}
-load(file = "StudentGradesLetters.RData")
-studentgrades
+```{r adding error bars}
+## trying to add error bars to a barplot of grade predictions
+errors <- abs(predictions - actual)
+error_bars <- errors * 1.6  # Approximate 95% confidence interval
+
+plot(actual, predictions, 
+     xlab = "Actual Grades", ylab = "Predicted Grades",
+     main = "Predicted vs Actual Grades with Error Bars", xlim = c(55,100), ylim = c(40,110),pch = 16)
+
+# Add error bars
+arrows(actual, predictions - error_bars, 
+       actual, predictions + error_bars, 
+       angle = 90, code = 3, length = 0.1, col = 1:length(predictions))
+
+abline(0, 1, col = "red")
 ```
 
-```{r}
-library(dplyr)
-convert_to_binary <- function(x) {
-  ifelse(x == "F", 0, 1)
-}
 
-# Apply the conversion function to all columns except the first 5 columns
-studentgrades <- studentgrades %>% mutate(across(-c(1:5), convert_to_binary))
-```
+```{r gridSearch on shrinkage parameter, }
+library(caret)
+library(tidyverse)
 
+train_control = trainControl(method = "cv", number = 5, search = "grid")
 
-```{r}
-# Identifying the course of interest
-COI <- "STAT.230"
-coursegrades <- studentgrades[!is.na(studentgrades[,COI]),-1:-5]
-
-
-# dropping columns that are very sparse (pct % are NA)
-pct <- 0.95
-courses <- numeric(0)
-for (i in 1:ncol(coursegrades)) {
-  if(is.na(coursegrades[,i]) |> sum()  > nrow(coursegrades)*pct){
-    courses <- c(courses,i)
-  }
-}
-
-coursegrades <- coursegrades[,-courses]
-
-
-# Removing all course columns of higher years
-YOI <- as.integer(substr(strsplit(COI, split = ".", fixed = TRUE)[[1]][2],1,1))
-
-column_names <- colnames(coursegrades)
-
-# Extract digits after the period in column names
-column_digits <- as.integer(sub("^[^.]+\\.([0-9]).*", "\\1", column_names))
-
-# Find columns with digits not matching the selected course year
-cols_to_keep <- column_names[column_digits <= YOI]
-
-# All columns in the same year or below
-coursegrades <- coursegrades[, colnames(coursegrades) %in% cols_to_keep]
-
-
-
-# Factoring all columns
-# for(i in 1:ncol(coursegrades)){
-#   coursegrades[,i] <- as.factor(coursegrades[,i])
-# }
-```
-
-```{r GBM cv}
-set.seed(5934)
-n_rows <- nrow(coursegrades)
-train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
-test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
-
-library(gbm)
-
-gbm_params <- list(
-  distribution = "adaboost",  # Specify the distribution for regression
-  n.trees = 200,               # Number of trees (iterations)
-  interaction.depth = 4,       # Maximum depth of trees
-  shrinkage = 0.05,            # Learning rate (shrinkage)
-  bag.fraction = 0.5,          # Fraction of training data used for each tree
-  train.fraction = 1.0,        # Fraction of training data used for training (1.0 for full dataset)
-  n.minobsinnode = 10          # Minimum number of observations in terminal nodes
+gbmGrid <-  expand.grid(
+  # distribution = "gaussian",  # Specify the distribution for regression
+  n.trees = c(200,500,1000,1500,2000),               # Number of trees (iterations)
+  interaction.depth = c(3:7),       # Maximum depth of trees
+  shrinkage = c(0.025,0.01,0.005,0.0025,0.001),           # Learning rate (shrinkage)
+  # bag.fraction = 0.5,          # Fraction of training data used for each tree
+  # train.fraction = 1.0,        # Fraction of training data used for training (1.0 for full dataset)
+  n.minobsinnode = c(5,8,10,12,15)          # Minimum number of observations in terminal nodes
 )
 
-# Running model first time on base params
-gbm_model <- gbm(STAT.230 ~ ., data = coursegrades, distribution = gbm_params$distribution,
-                 n.trees = gbm_params$n.trees, interaction.depth = gbm_params$interaction.depth,
-                 shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
-                 train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 5)
+# training a Gboost Regression tree model while tuning parameters
+model = train(STAT.230~., data = coursegrades, method = "gbm", trControl = train_control, tuneGrid = gbmGrid, na.action = na.pass)
 
-
-ntrees <- gbm.perf(gbm_model,method="cv")[1]
-
-
-
-# Running model a second time with optimal # of trees
-gbm_model <- gbm(STAT.230 ~ ., data = coursegrades[train_indices,], distribution = gbm_params$distribution,
-                 n.trees = ntrees, interaction.depth = gbm_params$interaction.depth,
-                 shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
-                 train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 5)
-
-# Print the summary of the trained model
-print(summary(gbm_model))
+# summarising the results
+print(model)
 
 # Make predictions on new data
-predictions <- predict(gbm_model, newdata = coursegrades[test_indices,], n.trees = ntrees)
-
+# predictions <- predict(model$bestTune, newdata = coursegrades[test_indices,], n.trees = ntrees)
+# 
 # rmse <- sqrt(mean((predictions - coursegrades[test_indices,COI])^2))
 # rmse
 ```
 
-Tried classification on letter grades. Turns out it must be a binary input so I switched to a pass/fail objective. Where "F" grades are 0, and everything else is 1. ntrees is predicting well and works on OOB and CV. However the prediction results range from -0.036 to 3... not sure what to make of it.
+
+
