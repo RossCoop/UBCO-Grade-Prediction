@@ -105,9 +105,9 @@ library(gbm)
 
 gbm_params <- list(
   distribution = "gaussian",  # Specify the distribution for regression
-  n.trees = 200,               # Number of trees (iterations)
+  n.trees = 10000,               # Number of trees (iterations)
   interaction.depth = 4,       # Maximum depth of trees
-  shrinkage = 0.05,            # Learning rate (shrinkage)
+  shrinkage = 0.00075,            # Learning rate (shrinkage)
   bag.fraction = 0.5,          # Fraction of training data used for each tree
   train.fraction = 1.0,        # Fraction of training data used for training (1.0 for full dataset)
   n.minobsinnode = 10          # Minimum number of observations in terminal nodes
@@ -129,19 +129,19 @@ print(gbm.perf(gbm_model, method="OOB"))
 ```{r GBM}
 set.seed(5934)
 n_rows <- nrow(coursegrades)
-train_indices <- sample(1:n_rows, 0.85 * n_rows)  # 80% of rows for training
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
 test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
 
 library(gbm)
 
 gbm_params <- list(
   distribution = "laplace",  # Specify the distribution for regression
-  n.trees = 1000,               # Number of trees (iterations)
+  n.trees = 10000,               # Number of trees (iterations)
   interaction.depth = 5,       # Maximum depth of trees
-  shrinkage = 0.01,            # Learning rate (shrinkage)
+  shrinkage = 0.00075,            # Learning rate (shrinkage)
   bag.fraction = 0.5,          # Fraction of training data used for each tree
   train.fraction = 1.0,        # Fraction of training data used for training (1.0 for full dataset)
-  n.minobsinnode = 15          # Minimum number of observations in terminal nodes
+  n.minobsinnode = 5          # Minimum number of observations in terminal nodes
 )
 
 # Running model first time on base params
@@ -188,13 +188,20 @@ abline(line.lm, col = "green")
 
 
 ```{r adding error bars}
-## trying to add error bars to a barplot of grade predictions
-errors <- abs(predictions - actual)
-error_bars <- errors * 1.6  # Approximate 95% confidence interval
+## calculating size of error bars
+# errors <- abs(predictions - actual)
+# error_bars <- errors * 1.96  # Approximate 95% confidence interval
 
+error_bars <- sd(predictions)/sqrt(length(predictions))# * 1.96
+
+
+
+
+
+## plotting graph and error bars
 plot(actual, predictions, 
      xlab = "Actual Grades", ylab = "Predicted Grades",
-     main = "Predicted vs Actual Grades with Error Bars", xlim = c(55,100), ylim = c(40,110),pch = 16)
+     main = "Predicted vs Actual Grades with Error Bars", xlim = c(60,100), ylim = c(60,100),pch = 16)
 
 # Add error bars
 arrows(actual, predictions - error_bars, 
@@ -234,5 +241,12 @@ print(model)
 # rmse
 ```
 
+```{r boxplot of pred/actu}
+par(mfrow=c(1,2))
+boxplot(predictions, ylim=c(60,100))
+boxplot(actual, ylim=c(60,100))
+
+boxplot(coursegrades$STAT.230, ylim=c(60,100))
+```
 
 
