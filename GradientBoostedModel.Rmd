@@ -133,7 +133,7 @@ print(gbm.perf(gbm_model, method="OOB"))
 ## Model Training and Prediction
 
 ```{r GBM}
-set.seed(5934)
+# set.seed(5934)
 n_rows <- nrow(coursegrades)
 train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
 test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
@@ -156,8 +156,8 @@ gbm_model <- gbm(STAT.230 ~ ., data = coursegrades, distribution = gbm_params$di
                  shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
                  train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 5)
 
+# saving optimal # of trees
 ntrees <- gbm.perf(gbm_model,method="cv")[1]
-# ntrees <- 1000
 
 
 
@@ -218,9 +218,9 @@ abline(0, 1, col = "red")
 ## training two more gbms using quantile ranges as the prediction interval
 
 gbm_params <- list(
-  distribution = list(name = "quantile", alpha = 0.05),  # Specify the distribution for regression
+  distribution = list(name = "quantile", alpha = 0.025),  # Specify the distribution for regression
   n.trees = 8000,               # Number of trees (iterations)
-  interaction.depth = 2,       # Maximum depth of trees
+  interaction.depth = 4,       # Maximum depth of trees
   shrinkage = 0.001,            # Learning rate (shrinkage)
   bag.fraction = 0.5,          # Fraction of training data used for each tree
   train.fraction = 1.0,        # Fraction of training data used for training (1.0 for full dataset)
@@ -237,9 +237,9 @@ LB_predictions <- predict(gbm_model, newdata = coursegrades[test_indices,], n.tr
 
 
 gbm_params <- list(
-  distribution = list(name = "quantile", alpha = 0.95),  # Specify the distribution for regression
+  distribution = list(name = "quantile", alpha = 0.975),  # Specify the distribution for regression
   n.trees = 8000,               # Number of trees (iterations)
-  interaction.depth = 2,       # Maximum depth of trees
+  interaction.depth = 4,       # Maximum depth of trees
   shrinkage = 0.001,            # Learning rate (shrinkage)
   bag.fraction = 0.5,          # Fraction of training data used for each tree
   train.fraction = 1.0,        # Fraction of training data used for training (1.0 for full dataset)
@@ -272,17 +272,22 @@ abline(0, 1, col = "red")
 
 
 ```{r}
-length(predictions)
-sum(actual < LB_predictions)
+# length(predictions)
+# sum(actual < LB_predictions)
+# 
+# 
+# coursegrades[test_indices[lowpred],]
+# predictions[lowpred]
 
 
-coursegrades[test_indices[lowpred],]
-predictions[lowpred]
-
-
-
-# lowpred <- which(actual < LB_predictions)
-lowpred <- which(LB_predictions <= 50)
+# actual grade below lower bound
+lowpred <- which(actual < LB_predictions)
+# actual grade above upper bound
+# lowpred <- which(actual > UB_predictions)
+# lower bound below 50
+# lowpred <- which(LB_predictions <= 50)
+# lower bound within 5 of actual grade
+# lowpred <- which(abs(actual - LB_predictions) <= 5 | actual < LB_predictions)
 
 ## plotting graph and error bars
 plot(actual[lowpred], predictions[lowpred], 
@@ -346,7 +351,7 @@ test_data <- xgb.DMatrix(as.matrix(coursegrades[test_indices,!names(coursegrades
 
 watchlist = list(train=train_data, test=test_data)
 
-xgbm_model <- xgb.train(data=train_data, max.depth=2, eta=0.05, nthread = 2, nrounds=200, lambda = 2, booster = "gbtree", subsample = 0.5, tree_method = "auto", watchlist=watchlist, objective = "reg:squarederror", verbose = 0, early_stopping_rounds = 10)
+xgbm_model <- xgb.train(data=train_data, max.depth=4, eta=0.01, nthread = 2, nrounds=1000, lambda = 0, booster = "gbtree", subsample = 0.5, tree_method = "auto", watchlist=watchlist, objective = "reg:squarederror", verbose = 0, early_stopping_rounds = 10, colsample_bytree = 0.5)
 
 # Print the summary of the trained model
 summary(xgbm_model)
@@ -371,10 +376,64 @@ abline(line.lm, col = "green")
 ```
 
 ```{r xGBM quantile error bars}
+# bootstrapping the model x times 
+
+n_iterations = 100  # Number of bootstrapped models
+predictions = numeric(0)
+
+for(i in 1:n_iterations){
+  # Create a bootstrapped dataset
+  set.seed(100+i)
+  
+  n_rows <- nrow(coursegrades)
+  train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+  test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+    
+  # Train an XGBoost model
+  train_data <- xgb.DMatrix(as.matrix(coursegrades[train_indices,!names(coursegrades) %in% c("STAT.230")]), label = coursegrades[train_indices,"STAT.230"])
+  test_data <- xgb.DMatrix(as.matrix(coursegrades[test_indices,!names(coursegrades) %in% c("STAT.230")]), label = coursegrades[test_indices,"STAT.230"])
+
+  watchlist = list(train=train_data, test=test_data)
+
+  xgbm_model <- xgb.train(data=train_data, max.depth=4, eta=0.01, nthread = 2, nrounds=1000, lambda = 0, booster = "gbtree", subsample = 0.5, tree_method = "auto", watchlist=watchlist, objective = "reg:squarederror", verbose = 0, early_stopping_rounds = 10, colsample_bytree = 0.5)
+    
+  # Predict on test data
+  preds <- predict(xgbm_model, test_data)
+  predictions <- append(predictions, preds)
+  
+  sprintf("%s done", i)
+}
+
+# Convert predictions to a NumPy array
+#predictions
+
+# Calculate the mean and standard deviation of the predictions
+mean_preds = mean(predictions)
+std_preds = sd(predictions)
+
+# Confidence intervals
+lower_bound = mean_preds - 1.96 * std_preds
+upper_bound = mean_preds + 1.96 * std_preds
 
 ```
 
+```{r adding error bars}
+## plotting graph and error bars made from bootstrapping predictions from many different models
+UB_predictions <- predictions + 1.96 * std_preds
+LB_predictions <- predictions - 1.96 * std_preds
 
+
+plot(actual, predictions, 
+     xlab = "Actual Grades", ylab = "Predicted Grades",
+     main = "Predicted vs Actual Grades with Error Bars", xlim = c(00,100), ylim = c(0,100),pch = 16)
+
+# Add error bars
+arrows(actual, LB_predictions, 
+       actual, UB_predictions, 
+       angle = 90, code = 3, length = 0.1, col = 1:length(predictions))
+
+abline(0, 1, col = "red")
+```
 
 ```{r gridSearch on xGBM}
 library(caret)
@@ -417,8 +476,8 @@ rmseErrorsHyperparameters <- apply(searchGridSubCol, 1, function(parameterList){
 
 
 ```{r}
-save(file="xgb_grid_search.RData", xgb_hyperparams)
-load("xgb_grid_search.RData")
+# save(file="xgb_grid_search.RData", xgb_hyperparams)
+# load("xgb_grid_search.RData")
 
 xgb_hyperparams <- data.frame(t(rmseErrorsHyperparameters))
 xgb_hyperparams$lambda <- searchGridSubCol$lambda
