@@ -415,3 +415,21 @@ rmseErrorsHyperparameters <- apply(searchGridSubCol, 1, function(parameterList){
   output <- return(c(rmse, trmse, currentSubsampleRate, currentColsampleRate, currentDepth, currentEta, currentMinChild))}))
 ```
 
+
+```{r}
+save(file="xgb_grid_search.RData", xgb_hyperparams)
+load("xgb_grid_search.RData")
+
+xgb_hyperparams <- data.frame(t(rmseErrorsHyperparameters))
+xgb_hyperparams$lambda <- searchGridSubCol$lambda
+xgb_hyperparams$alpha <- searchGridSubCol$alpha
+
+colnames(xgb_hyperparams) <- c("rmse", "trmse", "subsample", "colsample_bytree", "max_depth", "eta", "min_child", "lambda", "alpha")
+
+xgb_hyperparams[order(xgb_hyperparams$rmse),]
+```
+
+```{r}
+searchGridSubCol
+```
+
