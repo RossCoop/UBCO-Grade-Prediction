@@ -266,7 +266,7 @@ studentgrades
 ```
 
 ```{r}
-save(studentgrades, file = "StudentGradesLetters.RData")
+save(studentgrades, file = "StudentGrades.RData")
 ```
 
 
