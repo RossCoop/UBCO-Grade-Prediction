@@ -67,8 +67,9 @@ The vignette recommends to use 5 or 10-fold CV if you can afford the computation
 COI <- "STAT.230"
 coursegrades <- studentgrades[!is.na(studentgrades[,COI]),-1:-5]
 
-# remove all grades < 60%
-coursegrades <- coursegrades[coursegrades$STAT.230 >= 60, ]
+# remove all grades < 50%
+coursegrades <- coursegrades[coursegrades$STAT.230 >= 5, ]
+
 
 
 # dropping columns that are very sparse (pct % are NA)
@@ -81,6 +82,11 @@ for (i in 1:ncol(coursegrades)) {
 }
 
 coursegrades <- coursegrades[,-courses]
+
+
+# removing all students who don't meet course pre reqs DATA 101, COSC 221
+coursegrades <- coursegrades[!is.na(coursegrades$DATA.101) | !is.na(coursegrades$COSC.221), ]
+
 
 
 # Removing all course columns of higher years
@@ -137,7 +143,7 @@ library(gbm)
 gbm_params <- list(
   distribution = "gaussian",  # Specify the distribution for regression
   n.trees = 8000,               # Number of trees (iterations)
-  interaction.depth = 2,       # Maximum depth of trees
+  interaction.depth = 3,       # Maximum depth of trees
   shrinkage = 0.001,            # Learning rate (shrinkage)
   bag.fraction = 0.5,          # Fraction of training data used for each tree
   train.fraction = 1.0,        # Fraction of training data used for training (1.0 for full dataset)
@@ -198,7 +204,7 @@ error_bars <- sd(errors)
 ## plotting graph and error bars
 plot(actual, predictions, 
      xlab = "Actual Grades", ylab = "Predicted Grades",
-     main = "Predicted vs Actual Grades with Error Bars", xlim = c(50,100), ylim = c(50,100),pch = 16)
+     main = "Predicted vs Actual Grades with Error Bars", xlim = c(0,100), ylim = c(0,100),pch = 16)
 
 # Add error bars
 arrows(actual, predictions - error_bars, 
@@ -250,6 +256,47 @@ UB_predictions <- predict(gbm_model, newdata = coursegrades[test_indices,], n.tr
 ```
 
 
+```{r adding error bars}
+## plotting graph and error bars
+plot(actual, predictions, 
+     xlab = "Actual Grades", ylab = "Predicted Grades",
+     main = "Predicted vs Actual Grades with Error Bars", xlim = c(00,100), ylim = c(0,100),pch = 16)
+
+# Add error bars
+arrows(actual, LB_predictions, 
+       actual, UB_predictions, 
+       angle = 90, code = 3, length = 0.1, col = 1:length(predictions))
+
+abline(0, 1, col = "red")
+```
+
+
+```{r}
+length(predictions)
+sum(actual < LB_predictions)
+
+
+coursegrades[test_indices[lowpred],]
+predictions[lowpred]
+
+
+
+# lowpred <- which(actual < LB_predictions)
+lowpred <- which(LB_predictions <= 50)
+
+## plotting graph and error bars
+plot(actual[lowpred], predictions[lowpred], 
+     xlab = "Actual Grades", ylab = "Predicted Grades",
+     main = "Predicted vs Actual Grades with Error Bars", xlim = c(00,100), ylim = c(0,100),pch = 16)
+
+# Add error bars
+arrows(actual[lowpred], LB_predictions[lowpred], 
+       actual[lowpred], UB_predictions[lowpred], 
+       angle = 90, code = 3, length = 0.1, col = 1:length(predictions[lowpred]))
+
+abline(0, 1, col = "red")
+```
+
 
 ```{r gridSearch on GBM}
 library(caret)
@@ -282,19 +329,6 @@ print(model)
 
 
 
-```{r comparing predicted, actual, and student mean grades}
-comp <- data.frame(pred=predictions, actual=actual)
-
-avgs <- rowMeans(coursegrades[test_indices,], na.rm = TRUE)
-comp <- cbind(comp, avgs)
-
-plot(avgs~pred, data=comp, xlim=c(0,100), ylim=c(0,100))
-
-barplot(t(as.matrix(comp[20:29,])), beside=TRUE)
-```
-
-
-
 ```{r extreme gradient boosting}
 library(xgboost)
 
@@ -312,10 +346,11 @@ test_data <- xgb.DMatrix(as.matrix(coursegrades[test_indices,!names(coursegrades
 
 watchlist = list(train=train_data, test=test_data)
 
-xgbm_model <- xgb.train(data=train_data, max.depth=2, eta=0.05, nthread = 2, nrounds=200, lambda = 2, booster = "gbtree", subsample = 0.5, tree_method = "auto", watchlist=watchlist, objective = "reg:squarederror", verbose = 2)
+xgbm_model <- xgb.train(data=train_data, max.depth=2, eta=0.05, nthread = 2, nrounds=200, lambda = 2, booster = "gbtree", subsample = 0.5, tree_method = "auto", watchlist=watchlist, objective = "reg:squarederror", verbose = 0, early_stopping_rounds = 10)
 
 # Print the summary of the trained model
 summary(xgbm_model)
+
 
 # Make predictions on new data
 predictions <- predict(xgbm_model, test_data)
@@ -334,6 +369,11 @@ abline(0, 1, col = "red")
 line.lm <- lm(predictions~actual)
 abline(line.lm, col = "green")
 ```
+
+```{r xGBM quantile error bars}
+
+```
+
 
 
 ```{r gridSearch on xGBM}
