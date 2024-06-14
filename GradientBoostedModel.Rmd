@@ -65,15 +65,19 @@ The vignette recommends to use 5 or 10-fold CV if you can afford the computation
 ```{r GBM data prep}
 # Identifying the course of interest
 COI <- "STAT.230"
-coursegrades <- studentgrades[!is.na(studentgrades[,COI]),-1:-5]
+coursegrades <- studentgrades[!is.na(studentgrades[,COI]),-c(1,3,5)]
 
 # remove all grades < 50%
 coursegrades <- coursegrades[coursegrades$STAT.230 >= 5, ]
 
+# factoring student majors
+coursegrades$Major.1 <- factor(coursegrades$Major.1)
+# factoring student minors
+coursegrades$Minor <- factor(coursegrades$Minor)
 
 
 # dropping columns that are very sparse (pct % are NA)
-pct <- 0.9
+pct <- 0.85
 courses <- numeric(0)
 for (i in 1:ncol(coursegrades)) {
   if(is.na(coursegrades[,i]) |> sum()  > nrow(coursegrades)*pct){
@@ -142,7 +146,7 @@ library(gbm)
 
 gbm_params <- list(
   distribution = "gaussian",  # Specify the distribution for regression
-  n.trees = 8000,               # Number of trees (iterations)
+  n.trees = 6000,               # Number of trees (iterations)
   interaction.depth = 3,       # Maximum depth of trees
   shrinkage = 0.001,            # Learning rate (shrinkage)
   bag.fraction = 0.5,          # Fraction of training data used for each tree
