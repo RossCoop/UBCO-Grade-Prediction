@@ -8,7 +8,7 @@ output: html_document
 ```{r}
 df <- read.csv("..\\UBCO-Grade-Prediction-data\\student-data.csv")
 
-df_clean <- df[,c(1,2,3,4,5,6,7,8,9,10,11,12,13,15,16,17,14)]
+df_clean <- df[,c(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18)]
 #df_clean <- na.omit(df_clean)
 # Do some cleaning on chr columns
 df_clean$STUD_NO_ANONYMOUS <- trimws(df_clean$STUD_NO_ANONYMOUS)
@@ -23,6 +23,9 @@ df_clean$CURR_SPEC_SECN_SUBJECT_1 <- trimws(df_clean$CURR_SPEC_SECN_SUBJECT_1)
 df_clean$CURR_SPEC_SECN_PGM_TYPE_2 <- trimws(df_clean$CURR_SPEC_SECN_PGM_TYPE_2)
 df_clean$CURR_SPEC_SECN_SUBJECT_2 <- trimws(df_clean$CURR_SPEC_SECN_SUBJECT_2)
 df_clean$DEGR_PGM_CD <- trimws(df_clean$DEGR_PGM_CD)
+df_clean$SEC_SES_YR <- trimws(df_clean$SEC_SES_YR)
+df_clean$SEC_NO <- trimws(df_clean$SEC_NO)
+df_clean$SEC_SES_CD <- trimws(df_clean$SEC_SES_CD)
 
 
 # Factor grades column
@@ -39,10 +42,12 @@ df_clean <- df_clean[df_clean$HDR_CRS_PCT_GRD < 999,]
 # Changing all withdrawls (999.9) to -1 to ensure they're kept in the data
 #df_clean$HDR_CRS_PCT_GRD[df_clean$HDR_CRS_PCT_GRD == 999.9] <- -1
 
-
+# Create year code column
+df_clean$YEAR_CODE <- paste0(df_clean$SEC_SES_YR, df_clean$SEC_SES_CD)
+df_clean <- df_clean[,-(15:16)]
 
 # Removing 2023 grades (not included) [also does nothing bc ^ cleans it out]
-df_clean <- subset(df_clean, SEC_SES_YR < 2022.5)
+#df_clean <- subset(df_clean, SEC_SES_YR < 2022.5)
 
 # Subsetting only BSc students
 df_bsc <- df_clean
@@ -259,7 +264,7 @@ for (i in 1:nrow(df_bsc_relevant_courses)){
   coursecol <- grep(df_bsc_relevant_courses[i,]$COURSE_CODE, colnames(studentgrades))[1]
   
   # Saving student grade into studentgrades df
-  studentgrades[studentgrades$Student_ID==df_bsc_relevant_courses[i,]$STUD_NO_ANONYMOUS,coursecol+rep] <- df_bsc_relevant_courses[i,]$HDR_CRS_PCT_GRD
+  studentgrades[studentgrades$Student_ID==df_bsc_relevant_courses[i,]$STUD_NO_ANONYMOUS,coursecol] <- df_bsc_relevant_courses[i,]$HDR_CRS_PCT_GRD
 }
 
 studentgrades
@@ -267,6 +272,100 @@ studentgrades
 
 ```{r}
 save(studentgrades, file = "StudentGrades.RData")
+```
+
+
+```{r making prof lookup table}
+course_list <- c("CHEM", "COSC", "DATA", "ECON", "MATH", "PHYS", "PSYO", "STAT")  # list of courses to find
+course_list.len <- length(course_list)
+year_list <- c(2018:2023)
+seasons <- c("S", "W")
+year_list <- paste0(rep(year_list, each=2), seasons)  # list of years with term
+
+# list of prof file names
+file_names <- paste0("UBCO-", year_list, "-", rep(course_list, each=12), ".csv")
+
+# full prof dataframe
+course_profs <- data.frame(Professor=character(), year_code=character(), course_name=character(), Section=character())
+
+for(i in 1:length(file_names)){
+  # Try to open the file connection
+  file_connection <- try(read.csv(paste0("UBCO-Profs/", file_names[i])), silent = TRUE)
+
+  # Check if the connection was successful
+  if (inherits(file_connection, "try-error")) {
+    
+  } else {
+    df <- file_connection
+    df$course_name <- paste(file_connection$Subject, file_connection$Course, sep = ".")
+    df$year_code <- paste0(file_connection$Year, file_connection$Session)
+    df <- df[,c("Professor", "year_code", "course_name", "Section")]
+    
+    course_profs <- rbind(course_profs, df)
+  }
+
+}
+
+course_profs
+
+# removing these, no prof data
+# course_profs <- course_profs[!course_profs$Section == "OVERALL",]
+
+
+```
+
+```{r}
+save(course_profs, file = "course_profs.RData")
+```
+
+```{r adjusting prof table}
+# all unique 'professor' names
+prof_names_full_data <- course_profs$Professor
+# length
+len <- length(prof_names_full_data)
+
+# empty vectors
+prof_names_all <- character()
+prof_lens <- numeric()
+
+# looping through to fill two vectors
+for(i in 1:len){
+  # adding all names to a pile of names (yes duplicates)
+  prof_names_all <-  c(prof_names_all, strsplit(prof_names_full_data[i], ";")[[1]])
+  # adding each unique 'professor' name's length (ie. # of profs)
+  prof_lens <- c(prof_lens, length(strsplit(prof_names_full_data[i], ";")[[1]]))
+}
+
+# list of all 'prof' names with more than one person
+prof_names_full_data[which(prof_lens > 1)]
+
+# df of all 'prof' names with more than one person
+course_profs[which(prof_lens > 1),]
+
+# courses we care about rn
+courses <- c("PSYO.111", "ENGL.112","MATH.101", "PSYO.121", "CHEM.121", "CHEM.123","COSC.111","ECON.101","COSC.121","MATH.221","PHYS.111","STAT.230","MATH.200","COSC.221","COSC.222","COSC.211","DATA.101")
+
+course_profs[prof_lens > 1 & (course_profs$course_name %in% courses),]
+
+
+#checking things
+sort(prof_lens, decreasing =  TRUE)
+sum(prof_lens > 1)
+unique(prof_names_all)
+
+# creating a table count of # of times profs taught
+prof_table <- table(prof_names_all)
+sort(prof_table, decreasing = TRUE)
+
+course_profs[10,]$Professor
+
+# trying it on ^ one column to start
+# want to separate and find (and save) the prof whose name has should up more times
+```
+
+
+```{r adding profs to studentgrades}
+studentgrades
 ```
 
 
