@@ -455,8 +455,12 @@ studentgrades_prof <- cbind(studentgrades_prof, student_mm[,-1], new_columns)
 # Saving student grades into df
 for (i in 1:nrow(df_bsc_relevant_courses)){
   
+  ## we have two 36,000 length things, df_bsc_rel_courses and matching_profs
+  ## need to pull grades from df and profs from match_profs ROW BY ROW
+  ## add to studengrades_prof, can split using + length(courses) between course and prof columns
+  
   # finding the index of course name .1
-  coursecol <- grep(df_bsc_relevant_courses[i,]$COURSE_CODE, colnames(studentgrades))[1]
+  coursecol <- grep(df_bsc_relevant_courses[i,]$COURSE_CODE, colnames(studentgrades_prof))[1]
   
   # Saving student grade into studentgrades df
   studentgrades_prof[studentgrades_prof$Student_ID==df_bsc_relevant_courses[i,]$STUD_NO_ANONYMOUS,coursecol] <- df_bsc_relevant_courses[i,]$HDR_CRS_PCT_GRD
