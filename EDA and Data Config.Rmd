@@ -452,6 +452,8 @@ colnames(new_columns) <- courseprof_cols
 studentgrades_prof <- cbind(studentgrades_prof, student_mm[,-1], new_columns)
 
 
+prof_column_adjust <- length(courses)
+
 # Saving student grades into df
 for (i in 1:nrow(df_bsc_relevant_courses)){
   
@@ -462,9 +464,16 @@ for (i in 1:nrow(df_bsc_relevant_courses)){
   # finding the index of course name .1
   coursecol <- grep(df_bsc_relevant_courses[i,]$COURSE_CODE, colnames(studentgrades_prof))[1]
   
-  # Saving student grade into studentgrades df
+  # Saving student grade into studentgrades_prof df
   studentgrades_prof[studentgrades_prof$Student_ID==df_bsc_relevant_courses[i,]$STUD_NO_ANONYMOUS,coursecol] <- df_bsc_relevant_courses[i,]$HDR_CRS_PCT_GRD
+  
+  # saving prof name into studentgrades_prof df
+  studentgrades_prof[studentgrades_prof$Student_ID==df_bsc_relevant_courses[i,]$STUD_NO_ANONYMOUS,coursecol+prof_column_adjust] <- matching_profs[i]
 }
+```
+
+```{r saving studentgrades_prof}
+save(studentgrades_prof, file="Prof_StudentGrades.RData")
 ```
 
 
