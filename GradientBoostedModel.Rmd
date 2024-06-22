@@ -567,3 +567,187 @@ xgb_hyperparams[order(xgb_hyperparams$rmse),]
 searchGridSubCol
 ```
 
+
+## Test on professor data
+
+```{r}
+load(file="Prof_StudentGrades.RData")
+head(studentgrades_prof)
+```
+
+
+```{r GBM data prep}
+# Identifying the course of interest
+COI <- "STAT.230"
+coursegrades <- studentgrades_prof[!is.na(studentgrades_prof[,COI]),-c(1,3,5)]
+
+# remove all grades < 50%
+coursegrades <- coursegrades[coursegrades$STAT.230 >= 5, ]
+
+# factoring student majors
+coursegrades$Major.1 <- factor(coursegrades$Major.1)
+# factoring student minors
+coursegrades$Minor <- factor(coursegrades$Minor)
+
+for(i in 20:36){
+  coursegrades[,i] <- factor(coursegrades[,i]) 
+}
+
+
+# dropping columns that are very sparse (pct % are NA)
+pct <- 0.85
+courses <- numeric(0)
+for(i in 1:ncol(coursegrades)) {
+  if(is.na(coursegrades[,i]) |> sum()  > nrow(coursegrades)*pct){
+    courses <- c(courses,i)
+  }
+}
+# subsetting out sparse columns
+coursegrades <- coursegrades[,-courses]
+
+
+# removing professor columns which have only one professor
+one_prof_courses <- numeric(0)
+for(i in 1:ncol(coursegrades)) {
+  if(length(unique(coursegrades[,i])) <= 2){   ## 2 being <NA> and the one prof
+    one_prof_courses <- c(one_prof_courses,i)
+  }
+}
+# sbusetting out professor columns w/ one prof
+coursegrades <- coursegrades[,-one_prof_courses]
+
+# removing all students (rows) who don't meet course pre reqs DATA 101, COSC 221
+coursegrades <- coursegrades[!is.na(coursegrades$DATA.101) | !is.na(coursegrades$COSC.221), ]
+
+
+
+```
+
+
+```{r GBM}
+set.seed(5934)
+n_rows <- nrow(coursegrades)
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+library(gbm)
+
+gbm_params <- list(
+  distribution = "gaussian",  # Specify the distribution for regression
+  n.trees = 6000,               # Number of trees (iterations)
+  interaction.depth = 3,       # Maximum depth of trees
+  shrinkage = 0.001,            # Learning rate (shrinkage)
+  bag.fraction = 0.5,          # Fraction of training data used for each tree
+  train.fraction = 1.0,        # Fraction of training data used for training (1.0 for full dataset)
+  n.minobsinnode = 5          # Minimum number of observations in terminal nodes
+)
+
+# Running model first time on base params
+gbm_model <- gbm(STAT.230 ~ ., data = coursegrades, distribution = gbm_params$distribution,
+                 n.trees = gbm_params$n.trees, interaction.depth = gbm_params$interaction.depth,
+                 shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
+                 train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 5)
+
+# saving optimal # of trees
+ntrees <- gbm.perf(gbm_model,method="cv")[1]
+
+
+
+# Running model a second time with optimal # of trees
+gbm_model <- gbm(STAT.230 ~ ., data = coursegrades[train_indices,], distribution = gbm_params$distribution,
+                 n.trees = ntrees, interaction.depth = gbm_params$interaction.depth,
+                 shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
+                 train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 5)
+
+# Print the summary of the trained model
+print(summary(gbm_model))
+
+# Make predictions on new data
+predictions <- predict(gbm_model, newdata = coursegrades[test_indices,], n.trees = ntrees)
+
+rmse <- sqrt(mean((predictions - coursegrades[test_indices,COI])^2))
+rmse
+```
+
+
+```{r}
+actual <- coursegrades[test_indices,]$STAT.230
+plot(actual, predictions, xlab = "Actual Grades", ylab = "Predicted Grades", 
+     main = "Predicted vs Actual Grades", pch = 16, col = "blue", xlim = c(0,100), ylim = c(0,100))
+abline(0, 1, col = "red")
+
+
+line.lm <- lm(predictions~actual)
+abline(line.lm, col = "green")
+```
+
+
+```{r bootstrap gbm error bars}
+# bootstrapping the model x times
+n_iterations = 50  # Number of bootstrapped models
+boot_preds = numeric(0)
+
+
+library(gbm)
+
+gbm_params <- list(
+  distribution = "gaussian",  # Specify the distribution for regression
+  n.trees = 8000,               # Number of trees (iterations)
+  interaction.depth = 3,       # Maximum depth of trees
+  shrinkage = 0.001,            # Learning rate (shrinkage)
+  bag.fraction = 0.5,          # Fraction of training data used for each tree
+  train.fraction = 1.0,        # Fraction of training data used for training (1.0 for full dataset)
+  n.minobsinnode = 5          # Minimum number of observations in terminal nodes
+)
+
+
+for(i in 1:n_iterations){
+  # Create a bootstrapped dataset
+  set.seed(100+i)
+  
+  n_rows <- nrow(coursegrades)
+  train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+  test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+    
+  gbm_model <- gbm(STAT.230 ~ ., data = coursegrades[train_indices,], distribution = gbm_params$distribution,
+                 n.trees = gbm_params$n.trees, interaction.depth = gbm_params$interaction.depth,
+                 shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
+                 train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 5)
+
+  
+  # Predict on test data
+  preds <- predict(gbm_model, newdata = coursegrades[test_indices,], n.trees = ntrees)
+  boot_preds <- append(boot_preds, preds)
+  
+}
+
+# Convert predictions to a NumPy array
+#predictions
+
+# Calculate the mean and standard deviation of the predictions
+mean_preds = mean(boot_preds)
+std_preds = sd(boot_preds)
+
+# Confidence intervals
+lower_bound = mean_preds - 1.96 * std_preds
+upper_bound = mean_preds + 1.96 * std_preds
+
+```
+
+```{r adding error bars}
+## plotting graph and error bars made from bootstrapping predictions from many different models
+UB_predictions <- predictions + 1.96 * std_preds
+LB_predictions <- predictions - 1.96 * std_preds
+
+
+plot(actual, predictions, 
+     xlab = "Actual Grades", ylab = "Predicted Grades",
+     main = "Predicted vs Actual Grades with Error Bars", xlim = c(00,100), ylim = c(0,100),pch = 16)
+
+# Add error bars
+arrows(actual, LB_predictions, 
+       actual, UB_predictions, 
+       angle = 90, code = 3, length = 0.1, col = 1:length(predictions))
+
+abline(0, 1, col = "red")
+```
