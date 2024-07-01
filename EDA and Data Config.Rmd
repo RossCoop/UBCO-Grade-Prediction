@@ -275,15 +275,11 @@ save(studentgrades, file = "StudentGrades.RData")
 ```
 
 
-```{r making prof lookup table}
-course_list <- c("CHEM", "COSC", "DATA", "ECON", "MATH", "PHYS", "PSYO", "STAT")  # list of courses to find
-course_list.len <- length(course_list)
-year_list <- c(2018:2023)
-seasons <- c("S", "W")
-year_list <- paste0(rep(year_list, each=2), seasons)  # list of years with term
 
-# list of prof file names
-file_names <- paste0("UBCO-", year_list, "-", rep(course_list, each=12), ".csv")
+
+```{r adding all csvs together}
+# getting all file names in UBCO-Profs folder
+file_names <- dir(path = "UBCO-Profs")
 
 # full prof dataframe
 course_profs <- data.frame(Professor=character(), year_code=character(), course_name=character(), Section=character())
@@ -306,13 +302,13 @@ for(i in 1:length(file_names)){
 
 }
 
+# both of these have no prof names
+course_profs <- course_profs[course_profs$Section != "OVERALL",]
+course_profs <- course_profs[course_profs$Professor != "",]
+
 course_profs
-
-# removing these, no prof data
-# course_profs <- course_profs[!course_profs$Section == "OVERALL",]
-
-
 ```
+
 
 ```{r}
 load("course_profs.RData")
@@ -338,41 +334,20 @@ for(i in 1:len){
   prof_lens <- c(prof_lens, length(strsplit(prof_names_full_data[i], ";")[[1]]))
 }
 
-# list of all 'prof' names with more than one person
-prof_names_full_data[which(prof_lens > 1)]
+# DF of all 'prof' names with more than one person
+# course_profs[which(prof_lens > 1),]
 
-# df of all 'prof' names with more than one person
-course_profs[which(prof_lens > 1),]
-
-# courses we care about rn
-courses <- c("PSYO.111", "ENGL.112","MATH.101", "PSYO.121", "CHEM.121", "CHEM.123","COSC.111","ECON.101","COSC.121","MATH.221","PHYS.111","STAT.230","MATH.200","COSC.221","COSC.222","COSC.211","DATA.101")
-
-course_profs[prof_lens > 1 & (course_profs$course_name %in% courses),]
-rel_course_profs <- course_profs[course_profs$course_name %in% courses,]
-
-#checking things
-sort(prof_lens, decreasing =  TRUE)
-sum(prof_lens > 1)
-unique(prof_names_all)
 
 # creating a table count of # of times profs taught
 prof_table <- table(prof_names_all)
 ordered_profs <- sort(prof_table, decreasing = TRUE)
-rownames(ordered_profs)
-
-course_profs[10,]$Professor
-
-# trying it on ^ one column to start
-# want to separate and find (and save) the prof whose name has should up more times
 ```
 
 ```{r}
 # making a new table to join on (to student grades)
-rel_course_profs <- course_profs[course_profs$course_name %in% courses,]
+rel_course_profs <- course_profs
 ordered_prof_names <- rownames(ordered_profs)
 
-
-# length(strsplit(rel_course_profs[3,"Professor"],";")[[1]])
 
 # loop through all rows
 for(r in 1:nrow(rel_course_profs)){
@@ -400,19 +375,24 @@ for(r in 1:nrow(rel_course_profs)){
 rel_course_profs
 ```
 
+```{r saving cleaned prof list}
+load("cleaned_profs.RData")
+save(rel_course_profs, file = "cleaned_profs.RData")
+```
+
 
 ```{r adding profs to studentgrades}
-studentgrades[,colnames(studentgrades) %in% courses]
-
+courses <- unique(rel_course_profs$course_name)
+courses <- colnames(studentgrades[,colnames(studentgrades) %in% courses])
 
 
 courseprof_cols <- c(courses, paste0(courses,".P"))
 
 
-cbind(studentgrades[,c(1:5)],studentgrades[,colnames(studentgrades) %in% courses])
+# cbind(studentgrades[,c(1:5)],studentgrades[,colnames(studentgrades) %in% courses])
 
 # cutting out all courses which will cause prof error
-df_bsc_relevant_courses <- df_bsc[df_bsc$COURSE_CODE %in% courses,]
+# df_bsc_relevant_courses <- df_bsc[df_bsc$COURSE_CODE %in% courses,]
 
 # adding in professors
 matching_profs <- character()
@@ -435,13 +415,12 @@ rel_course_profs[rel_course_profs$year_code == df_bsc_relevant_courses[i,"YEAR_C
                    rel_course_profs$Section == df_bsc_relevant_courses[i,"SEC_NO"],]$Professor
 
 
-length(matching_profs)
-nrow(df_bsc_relevant_courses)
+
 
 # creating list of unique ids
 uniqueids <- unique(df_bsc_relevant_courses$STUD_NO_ANONYMOUS)
 
-# from another chunk
+### from another chunk
 studentgrades_prof <- data.frame(Student_ID = sort(uniqueids))
 
 # Create a data frame with NA values and course column names
@@ -470,6 +449,8 @@ for (i in 1:nrow(df_bsc_relevant_courses)){
   # saving prof name into studentgrades_prof df
   studentgrades_prof[studentgrades_prof$Student_ID==df_bsc_relevant_courses[i,]$STUD_NO_ANONYMOUS,coursecol+prof_column_adjust] <- matching_profs[i]
 }
+
+studentgrades_prof
 ```
 
 ```{r saving studentgrades_prof}
