@@ -63,10 +63,12 @@ unique(df_clean$COURSE_CODE)|>length()
 courses_taken_bsc <- table(df_bsc$COURSE_CODE)
 
 
-#sorted_courses_taken_bsc <- sort(courses_taken_bsc, decreasing = TRUE)[1:200]
-sorted_courses_taken_bsc <- sort(courses_taken_bsc, decreasing = TRUE)
+# sorted_courses_taken_bsc <- sort(courses_taken_bsc, decreasing = TRUE)[1:200]
+# sorted_courses_taken_bsc <- sort(courses_taken_bsc, decreasing = TRUE)
 # sorted_courses_taken_bsc <- sorted_courses_taken_bsc[substr(names(sorted_courses_taken_bsc),1,4) %in% c("DATA","MATH",
                                                    # "COSC","STAT")]
+sorted_courses_taken_bsc <- sort(courses_taken_bsc[courses_taken_bsc > 25], decreasing = TRUE)
+
 
 barplot(sorted_courses_taken_bsc)
 # saving course names
@@ -385,14 +387,13 @@ save(rel_course_profs, file = "cleaned_profs.RData")
 courses <- unique(rel_course_profs$course_name)
 courses <- colnames(studentgrades[,colnames(studentgrades) %in% courses])
 
-
 courseprof_cols <- c(courses, paste0(courses,".P"))
 
 
 # cbind(studentgrades[,c(1:5)],studentgrades[,colnames(studentgrades) %in% courses])
 
 # cutting out all courses which will cause prof error
-# df_bsc_relevant_courses <- df_bsc[df_bsc$COURSE_CODE %in% courses,]
+df_bsc_relevant_courses <- df_bsc[df_bsc$COURSE_CODE %in% courses,]
 
 # adding in professors
 matching_profs <- character()
@@ -401,7 +402,7 @@ for(i in 1:nrow(df_bsc_relevant_courses)){
                    rel_course_profs$course_name == df_bsc_relevant_courses[i,"COURSE_CODE"] & 
                    rel_course_profs$Section == df_bsc_relevant_courses[i,"SEC_NO"],]$Professor) == 0){
     matching_profs <- c(matching_profs, NA)
-    next
+    # next
     
   } else {
     matching_profs <- c(matching_profs, rel_course_profs[rel_course_profs$year_code == df_bsc_relevant_courses[i,"YEAR_CODE"] & 
@@ -415,7 +416,8 @@ rel_course_profs[rel_course_profs$year_code == df_bsc_relevant_courses[i,"YEAR_C
                    rel_course_profs$Section == df_bsc_relevant_courses[i,"SEC_NO"],]$Professor
 
 
-
+length(matching_profs)
+nrow(df_bsc_relevant_courses)
 
 # creating list of unique ids
 uniqueids <- unique(df_bsc_relevant_courses$STUD_NO_ANONYMOUS)
@@ -451,6 +453,86 @@ for (i in 1:nrow(df_bsc_relevant_courses)){
 }
 
 studentgrades_prof
+```
+
+
+```{r creating studentgrades_prof}
+# creating all columns to be used in studentgrades_prof
+courseprof_cols <- c(course_names, paste0(course_names,".P"))
+
+
+# creating list of unique ids
+uniqueids <- unique(df_bsc_relevant_courses$STUD_NO_ANONYMOUS)
+
+### from another chunk
+studentgrades_prof <- data.frame(Student_ID = sort(uniqueids))
+
+# Create a data frame with NA values and course column names
+new_columns <- data.frame(matrix(NA, nrow = nrow(studentgrades_prof), ncol = length(courseprof_cols)))
+colnames(new_columns) <- courseprof_cols
+
+# Add course name columns to existing data frame
+studentgrades_prof <- cbind(studentgrades_prof, student_mm[,-1], new_columns)
+
+
+prof_column_adjust <- length(course_names)
+
+# Saving student grades into df
+for (i in 1:nrow(df_bsc_relevant_courses)){
+  
+  
+  # finding the index of course name
+  coursecol <- grep(df_bsc_relevant_courses[i,]$COURSE_CODE, colnames(studentgrades_prof))[1]
+  
+  # Saving student grade into studentgrades_prof df
+  studentgrades_prof[studentgrades_prof$Student_ID==df_bsc_relevant_courses[i,]$STUD_NO_ANONYMOUS,coursecol] <- df_bsc_relevant_courses[i,]$HDR_CRS_PCT_GRD
+  
+  # catching if there is no prof for course
+  if(length(rel_course_profs[rel_course_profs$year_code == df_bsc_relevant_courses[i,"YEAR_CODE"] & 
+                   rel_course_profs$course_name == df_bsc_relevant_courses[i,"COURSE_CODE"] & 
+                   rel_course_profs$Section == df_bsc_relevant_courses[i,"SEC_NO"],]$Professor) == 1){
+    
+    
+    # saving prof name into studentgrades_prof df
+  studentgrades_prof[studentgrades_prof$Student_ID==df_bsc_relevant_courses[i,]$STUD_NO_ANONYMOUS,coursecol+prof_column_adjust] <- rel_course_profs[rel_course_profs$year_code == df_bsc_relevant_courses[i,"YEAR_CODE"] & 
+                   rel_course_profs$course_name == df_bsc_relevant_courses[i,"COURSE_CODE"] & 
+                   rel_course_profs$Section == df_bsc_relevant_courses[i,"SEC_NO"],]$Professor
+  }
+  
+  # catching if there are more than one prof showed (PSYO 380 since it's missing 'Detail' in main student grades csv)
+  if(length(rel_course_profs[rel_course_profs$year_code == df_bsc_relevant_courses[i,"YEAR_CODE"] & 
+                   rel_course_profs$course_name == df_bsc_relevant_courses[i,"COURSE_CODE"] & 
+                   rel_course_profs$Section == df_bsc_relevant_courses[i,"SEC_NO"],]$Professor) > 1){
+    
+    
+    # saving prof name into studentgrades_prof df
+  studentgrades_prof[studentgrades_prof$Student_ID==df_bsc_relevant_courses[i,]$STUD_NO_ANONYMOUS,coursecol+prof_column_adjust] <- rel_course_profs[rel_course_profs$year_code == df_bsc_relevant_courses[i,"YEAR_CODE"] & 
+                   rel_course_profs$course_name == df_bsc_relevant_courses[i,"COURSE_CODE"] & 
+                   rel_course_profs$Section == df_bsc_relevant_courses[i,"SEC_NO"],]$Professor[1]
+  }
+  
+  
+}
+
+studentgrades_prof
+
+
+# removing columns with no or one prof
+cols_to_remove <- numeric(0)
+for(i in (prof_column_adjust+6):ncol(studentgrades_prof)){
+  if(length(unique(studentgrades_prof[,i])) <= 2){
+    cols_to_remove <- c(cols_to_remove, i)
+  }
+}
+
+studentgrades_prof <- studentgrades_prof[,-cols_to_remove]
+
+
+# factoring professor columns
+for(i in (prof_column_adjust+6):ncol(studentgrades_prof)){
+  studentgrades_prof[,i] <- factor(studentgrades_prof[,i])
+}
+
 ```
 
 ```{r saving studentgrades_prof}

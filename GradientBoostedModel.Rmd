@@ -576,7 +576,7 @@ head(studentgrades_prof)
 ```
 
 
-```{r GBM data prep}
+```{r GBM prof data prep}
 # Identifying the course of interest
 COI <- "STAT.230"
 coursegrades <- studentgrades_prof[!is.na(studentgrades_prof[,COI]),-c(1,3,5)]
@@ -589,13 +589,9 @@ coursegrades$Major.1 <- factor(coursegrades$Major.1)
 # factoring student minors
 coursegrades$Minor <- factor(coursegrades$Minor)
 
-for(i in 20:36){
-  coursegrades[,i] <- factor(coursegrades[,i]) 
-}
-
 
 # dropping columns that are very sparse (pct % are NA)
-pct <- 0.85
+pct <- 0.9
 courses <- numeric(0)
 for(i in 1:ncol(coursegrades)) {
   if(is.na(coursegrades[,i]) |> sum()  > nrow(coursegrades)*pct){
@@ -606,15 +602,20 @@ for(i in 1:ncol(coursegrades)) {
 coursegrades <- coursegrades[,-courses]
 
 
-# removing professor columns which have only one professor
-one_prof_courses <- numeric(0)
-for(i in 1:ncol(coursegrades)) {
-  if(length(unique(coursegrades[,i])) <= 2){   ## 2 being <NA> and the one prof
-    one_prof_courses <- c(one_prof_courses,i)
-  }
-}
-# sbusetting out professor columns w/ one prof
-coursegrades <- coursegrades[,-one_prof_courses]
+# Removing all course columns of higher years
+YOI <- as.integer(substr(strsplit(COI, split = ".", fixed = TRUE)[[1]][2],1,1))
+
+column_names <- colnames(coursegrades)
+
+# Extract digits after the period in column names
+column_digits <- as.integer(sub("^[^.]+\\.([0-9]).*", "\\1", column_names))
+
+# Find columns with digits not matching the selected course year
+cols_to_keep <- column_names[column_digits <= YOI]
+
+# All columns in the same year or below
+coursegrades <- coursegrades[, colnames(coursegrades) %in% cols_to_keep]
+
 
 # removing all students (rows) who don't meet course pre reqs DATA 101, COSC 221
 coursegrades <- coursegrades[!is.na(coursegrades$DATA.101) | !is.na(coursegrades$COSC.221), ]
@@ -624,7 +625,7 @@ coursegrades <- coursegrades[!is.na(coursegrades$DATA.101) | !is.na(coursegrades
 ```
 
 
-```{r GBM}
+```{r GBM on prof data}
 set.seed(5934)
 n_rows <- nrow(coursegrades)
 train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
@@ -634,7 +635,7 @@ library(gbm)
 
 gbm_params <- list(
   distribution = "gaussian",  # Specify the distribution for regression
-  n.trees = 6000,               # Number of trees (iterations)
+  n.trees = 8000,               # Number of trees (iterations)
   interaction.depth = 3,       # Maximum depth of trees
   shrinkage = 0.001,            # Learning rate (shrinkage)
   bag.fraction = 0.5,          # Fraction of training data used for each tree
@@ -670,7 +671,7 @@ rmse
 ```
 
 
-```{r}
+```{r prof prediction graph}
 actual <- coursegrades[test_indices,]$STAT.230
 plot(actual, predictions, xlab = "Actual Grades", ylab = "Predicted Grades", 
      main = "Predicted vs Actual Grades", pch = 16, col = "blue", xlim = c(0,100), ylim = c(0,100))
@@ -681,8 +682,13 @@ line.lm <- lm(predictions~actual)
 abline(line.lm, col = "green")
 ```
 
+```{r}
+coursegrades[,c("STAT.230","STAT.230.P","ENGL.112","ENGL.112.P")]
+unique(coursegrades$ENGL.112)
+```
 
-```{r bootstrap gbm error bars}
+
+```{r bootstrap gbm error bars (prof)}
 # bootstrapping the model x times
 n_iterations = 50  # Number of bootstrapped models
 boot_preds = numeric(0)
@@ -751,3 +757,56 @@ arrows(actual, LB_predictions,
 
 abline(0, 1, col = "red")
 ```
+
+```{r GBM recursive variable selection on prof data}
+
+set.seed(5934)
+n_rows <- nrow(coursegrades)
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+library(gbm)
+
+gbm_params <- list(
+  distribution = "gaussian",  # Specify the distribution for regression
+  n.trees = 8000,               # Number of trees (iterations)
+  interaction.depth = 3,       # Maximum depth of trees
+  shrinkage = 0.001,            # Learning rate (shrinkage)
+  bag.fraction = 0.5,          # Fraction of training data used for each tree
+  train.fraction = 1.0,        # Fraction of training data used for training (1.0 for full dataset)
+  n.minobsinnode = 5          # Minimum number of observations in terminal nodes
+)
+
+# Running model first time on base params
+gbm_model <- gbm(STAT.230 ~ ., data = coursegrades, distribution = gbm_params$distribution,
+                 n.trees = gbm_params$n.trees, interaction.depth = gbm_params$interaction.depth,
+                 shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
+                 train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 5)
+
+# saving optimal # of trees
+ntrees <- gbm.perf(gbm_model,method="cv")[1]
+
+
+
+# Running model a second time with optimal # of trees
+gbm_model <- gbm(STAT.230 ~ ., data = coursegrades[train_indices,], distribution = gbm_params$distribution,
+                 n.trees = ntrees, interaction.depth = gbm_params$interaction.depth,
+                 shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
+                 train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 5)
+
+# Print the summary of the trained model
+print(summary(gbm_model))
+col_inf <- relative.influence(gbm_model, sort. = TRUE)
+col_inf[[1]]/sum(col_inf) * 100 # currently close but off by small margin
+col_inf
+length(col_inf)
+
+
+# Make predictions on new data
+predictions <- predict(gbm_model, newdata = coursegrades[test_indices,], n.trees = ntrees)
+
+rmse <- sqrt(mean((predictions - coursegrades[test_indices,COI])^2))
+rmse
+
+```
+
