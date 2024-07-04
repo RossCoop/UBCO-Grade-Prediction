@@ -794,19 +794,84 @@ gbm_model <- gbm(STAT.230 ~ ., data = coursegrades[train_indices,], distribution
                  shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
                  train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 5)
 
-# Print the summary of the trained model
-print(summary(gbm_model))
-col_inf <- relative.influence(gbm_model, sort. = TRUE)
-col_inf[[1]]/sum(col_inf) * 100 # currently close but off by small margin
-col_inf
-length(col_inf)
-
 
 # Make predictions on new data
 predictions <- predict(gbm_model, newdata = coursegrades[test_indices,], n.trees = ntrees)
 
 rmse <- sqrt(mean((predictions - coursegrades[test_indices,COI])^2))
 rmse
+
+# making df to save columns removed and rmse
+model_perf <- data.frame(RMSE = rmse, col1 = NA, col2 = NA)
+
+
+
+
+
+
+
+
+# creating a temp coursegrades which we will modify
+temp_coursegrades <- coursegrades
+
+# main loop to filter variables
+for(loop in 1:floor((ncol(coursegrades)-3)/2)){
+  
+  # getting relative influence of variables
+  col_inf <- matrix(relative.influence(gbm_model))
+  col_inf_names <- gbm_model$var.names
+  
+  rel_inf <- data.frame(influence = col_inf, column = col_inf_names)
+  
+  rel_inf <- rel_inf[order(rel_inf$influence, decreasing = FALSE),]
+  
+  
+  # find columns to remove
+  cols_to_remove <- rel_inf[c(1,2),2]
+  for(i in 1:2){
+    col <- grep(cols_to_remove[i], colnames(temp_coursegrades))[1]
+    temp_coursegrades <- temp_coursegrades[,-col]
+  }
+  
+  set.seed(1234)
+  n_rows <- nrow(temp_coursegrades)
+  train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+  test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+  
+  
+  
+  # Running model first time on base params
+  gbm_model <- gbm(STAT.230 ~ ., data = temp_coursegrades, distribution = gbm_params$distribution,
+                 n.trees = gbm_params$n.trees, interaction.depth = gbm_params$interaction.depth,
+                 shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
+                 train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 10)
+
+  # saving optimal # of trees
+  ntrees <- gbm.perf(gbm_model,method="cv")[1]
+
+
+
+  # Running model a second time with optimal # of trees
+  gbm_model <- gbm(STAT.230 ~ ., data = temp_coursegrades[train_indices,], distribution = gbm_params$distribution,
+                 n.trees = ntrees, interaction.depth = gbm_params$interaction.depth,
+                 shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
+                 train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 10)
+  
+  
+  print(summary(gbm_model))
+  
+  # Make predictions on new data
+  predictions <- predict(gbm_model, newdata = coursegrades[test_indices,], n.trees = ntrees)
+
+  rmse <- sqrt(mean((predictions - coursegrades[test_indices,COI])^2))
+  
+  model_perf <- rbind(model_perf, c(rmse, cols_to_remove))
+  
+}
+
+
+
+
 
 ```
 
