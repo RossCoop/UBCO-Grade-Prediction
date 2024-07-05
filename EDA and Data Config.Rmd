@@ -383,7 +383,7 @@ save(rel_course_profs, file = "cleaned_profs.RData")
 ```
 
 
-```{r adding profs to studentgrades}
+```{r adding profs to studentgrades *OLD*}
 courses <- unique(rel_course_profs$course_name)
 courses <- colnames(studentgrades[,colnames(studentgrades) %in% courses])
 
@@ -536,6 +536,8 @@ for(i in (prof_column_adjust+6):ncol(studentgrades_prof)){
 ```
 
 ```{r saving studentgrades_prof}
+load(file="Prof_StudentGrades.RData")
+
 save(studentgrades_prof, file="Prof_StudentGrades.RData")
 ```
 

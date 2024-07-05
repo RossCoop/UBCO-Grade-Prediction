@@ -9,6 +9,9 @@ output: html_document
 ```{r}
 load(file="StudentGrades.RData")
 head(studentgrades)
+
+load(file="Prof_StudentGrades.RData")
+head(studentgrades_prof)
 ```
 
 # Gradient Boosted Model
@@ -64,11 +67,12 @@ The vignette recommends to use 5 or 10-fold CV if you can afford the computation
 
 ```{r GBM data prep}
 # Identifying the course of interest
-COI <- "MATH.200"
-coursegrades <- studentgrades[!is.na(studentgrades[,COI]),-c(1,3,5)]
+COI <- "COSC.221"
+coursegrades <- studentgrades_prof[!is.na(studentgrades_prof[,COI]),-c(1,3,5)]
 
 # remove all grades < 50%
-coursegrades <- coursegrades[coursegrades$MATH.200 >= 50, ]
+coursegrades <- coursegrades[coursegrades$COSC.221 >= 40, ]
+coursegrades <- coursegrades[coursegrades$COSC.221 <= 80, ]
 
 # factoring student majors
 coursegrades$Major.1 <- factor(coursegrades$Major.1)
@@ -76,8 +80,15 @@ coursegrades$Major.1 <- factor(coursegrades$Major.1)
 coursegrades$Minor <- factor(coursegrades$Minor)
 
 
+# removing all students who don't meet course pre reqs DATA 101, COSC 221
+coursegrades <- coursegrades[!is.na(coursegrades$MATH.101) | !is.na(coursegrades$MATH.103) | !is.na(coursegrades$MATH.142), ]
+
+# coursegrades <- coursegrades[!is.na(coursegrades$MATH.101), ]
+
+
+
 # dropping columns that are very sparse (pct % are NA)
-pct <- 0.85
+pct <- 0.8
 courses <- numeric(0)
 for (i in 1:ncol(coursegrades)) {
   if(is.na(coursegrades[,i]) |> sum()  > nrow(coursegrades)*pct){
@@ -88,10 +99,6 @@ for (i in 1:ncol(coursegrades)) {
 coursegrades <- coursegrades[,-courses]
 
 
-# removing all students who don't meet course pre reqs DATA 101, COSC 221
-# coursegrades <- coursegrades[!is.na(coursegrades$MATH.101) & !is.na(coursegrades$MATH.221), ]
-
-coursegrades <- coursegrades[!is.na(coursegrades$MATH.101), ]
 
 
 
@@ -108,6 +115,7 @@ cols_to_keep <- column_names[column_digits <= YOI]
 
 # All columns in the same year or below
 coursegrades <- coursegrades[, colnames(coursegrades) %in% cols_to_keep]
+coursegrades
 ```
 
 ## Iteration Graphs
@@ -148,16 +156,16 @@ library(gbm)
 
 gbm_params <- list(
   distribution = "gaussian",  # Specify the distribution for regression
-  n.trees = 7000,               # Number of trees (iterations)
+  n.trees = 8000,               # Number of trees (iterations)
   interaction.depth = 3,       # Maximum depth of trees
-  shrinkage = 0.001,            # Learning rate (shrinkage)
+  shrinkage = 0.005,            # Learning rate (shrinkage)
   bag.fraction = 0.5,          # Fraction of training data used for each tree
   train.fraction = 1.0,        # Fraction of training data used for training (1.0 for full dataset)
   n.minobsinnode = 5          # Minimum number of observations in terminal nodes
 )
 
 # Running model first time on base params
-gbm_model <- gbm(MATH.200 ~ ., data = coursegrades, distribution = gbm_params$distribution,
+gbm_model <- gbm(COSC.221 ~ ., data = coursegrades, distribution = gbm_params$distribution,
                  n.trees = gbm_params$n.trees, interaction.depth = gbm_params$interaction.depth,
                  shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
                  train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 5)
@@ -168,7 +176,7 @@ ntrees <- gbm.perf(gbm_model,method="cv")[1]
 
 
 # Running model a second time with optimal # of trees
-gbm_model <- gbm(MATH.200 ~ ., data = coursegrades[train_indices,], distribution = gbm_params$distribution,
+gbm_model <- gbm(COSC.221 ~ ., data = coursegrades[train_indices,], distribution = gbm_params$distribution,
                  n.trees = ntrees, interaction.depth = gbm_params$interaction.depth,
                  shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
                  train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 5)
@@ -188,7 +196,7 @@ rmse
 
 
 ```{r}
-actual <- coursegrades[test_indices,]$MATH.200
+actual <- coursegrades[test_indices,]$COSC.221
 plot(actual, predictions, xlab = "Actual Grades", ylab = "Predicted Grades", 
      main = "Predicted vs Actual Grades", pch = 16, col = "blue", xlim = c(0,100), ylim = c(0,100))
 abline(0, 1, col = "red")
@@ -196,6 +204,49 @@ abline(0, 1, col = "red")
 
 line.lm <- lm(predictions~actual)
 abline(line.lm, col = "green")
+```
+
+
+```{r pass fail prediction}
+library(caret)
+
+# Function to assign letter grades based on numeric ranges
+assign_grades <- function(scores) {
+  # Define the breaks for the numeric ranges
+  breaks <- c(-Inf, 49, 54, 59, 63, 67, 71, 75, 79, 84, 89, 100)
+  
+  # Define the corresponding labels for each range
+  labels <- c("F", "D", "C-", "C", "C+", "B-", "B", "B+", "A-", "A", "A+")
+  
+  # Use the cut function to assign labels based on the breaks
+  grades <- cut(scores, breaks = breaks, labels = labels, right = TRUE)
+  
+  return(grades)
+}
+
+
+
+predictions_letter <- assign_grades(predictions)
+actual_letter <- assign_grades(actual)
+
+confusionMatrix(predictions_letter, actual_letter)
+```
+
+```{r}
+library(ggplot2)
+
+confusion_matrix <- table(actual_letter, predictions_letter)
+confusion_matrix <- confusionMatrix(confusion_matrix)
+
+# Create the heat map
+ggplot(as.data.frame(confusion_matrix$table), aes(x = actual_letter, y = predictions_letter, fill = Freq)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient(low = "white", high = "red") +
+  labs(x = "Actual Grades", y = "Predicted Grades", fill = "Frequency") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  geom_tile(data = subset(as.data.frame(confusion_matrix$table), actual_letter == predictions_letter),
+            aes(fill = Freq), color = "black")
 ```
 
 
@@ -877,25 +928,6 @@ for(loop in 1:floor((ncol(coursegrades)-3)/2)){
 
 ```
 
-```{r pass fail prediction}
-# Function to assign letter grades based on numeric ranges
-assign_grades <- function(scores) {
-  # Define the breaks for the numeric ranges
-  breaks <- c(-Inf, 49, 54, 59, 63, 67, 71, 75, 79, 84, 89, 100)
-  
-  # Define the corresponding labels for each range
-  labels <- c("F", "D", "C-", "C", "C+", "B-", "B", "B+", "A-", "A", "A+")
-  
-  # Use the cut function to assign labels based on the breaks
-  grades <- cut(scores, breaks = breaks, labels = labels, right = TRUE)
-  
-  return(grades)
-}
 
-
-
-letter_grades <- assign_grades(coursegrades[,COI])
-letter_grades
-```
 
 
