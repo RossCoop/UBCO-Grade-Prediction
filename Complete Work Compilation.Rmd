@@ -1,0 +1,266 @@
+---
+title: "Complete Work"
+author: "Ross Cooper 54907605"
+date: "2024-07-10"
+output: html_document
+---
+
+
+
+
+# Data Cleaning and Processing
+
+## Student grades data
+```{r reading in student-data, eval = FALSE}
+## this chunk is used to read in student grades data from student-data.csv
+## and cleans the data to be used
+df <- read.csv("..\\UBCO-Grade-Prediction-data\\student-data.csv")
+
+df_clean <- df[,c(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18)]
+
+# Do some cleaning on chr columns
+df_clean$STUD_NO_ANONYMOUS <- trimws(df_clean$STUD_NO_ANONYMOUS)
+df_clean$CRS_DPT_CD <- trimws(df_clean$CRS_DPT_CD)
+df_clean$HDR_CRS_LTTR_GRD <- trimws(df_clean$HDR_CRS_LTTR_GRD)
+df_clean$CURR_SPEC_PRIM_PGM_TYPE_1 <- trimws(df_clean$CURR_SPEC_PRIM_PGM_TYPE_1)
+df_clean$CURR_SPEC_PRIM_SUBJECT_1 <- trimws(df_clean$CURR_SPEC_PRIM_SUBJECT_1)
+df_clean$CURR_SPEC_PRIM_PGM_TYPE_2 <- trimws(df_clean$CURR_SPEC_PRIM_PGM_TYPE_2)
+df_clean$CURR_SPEC_PRIM_SUBJECT_2 <- trimws(df_clean$CURR_SPEC_PRIM_SUBJECT_2)
+df_clean$CURR_SPEC_SECN_PGM_TYPE_1 <- trimws(df_clean$CURR_SPEC_SECN_PGM_TYPE_1)
+df_clean$CURR_SPEC_SECN_SUBJECT_1 <- trimws(df_clean$CURR_SPEC_SECN_SUBJECT_1)
+df_clean$CURR_SPEC_SECN_PGM_TYPE_2 <- trimws(df_clean$CURR_SPEC_SECN_PGM_TYPE_2)
+df_clean$CURR_SPEC_SECN_SUBJECT_2 <- trimws(df_clean$CURR_SPEC_SECN_SUBJECT_2)
+df_clean$DEGR_PGM_CD <- trimws(df_clean$DEGR_PGM_CD)
+df_clean$SEC_SES_YR <- trimws(df_clean$SEC_SES_YR)
+df_clean$SEC_NO <- trimws(df_clean$SEC_NO)
+df_clean$SEC_SES_CD <- trimws(df_clean$SEC_SES_CD)
+
+
+# Factor grades column
+grades <-
+  c("A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D", "F")
+df_clean$HDR_CRS_LTTR_GRD <-
+  factor(df_clean$HDR_CRS_LTTR_GRD, levels = grades)
+
+# Create course code column
+df_clean$COURSE_CODE <- paste(df_clean$CRS_DPT_CD, df_clean$CRS_NO, sep = ".")
+df_clean <- df_clean[,-(12:13)]
+
+# Removing all withdrawl grades
+df_clean <- df_clean[df_clean$HDR_CRS_PCT_GRD < 999,]
+
+# Changing all withdrawls (999.9) to -1 to ensure they're kept in the data
+#df_clean$HDR_CRS_PCT_GRD[df_clean$HDR_CRS_PCT_GRD == 999.9] <- -1
+
+# Create year code column
+df_clean$YEAR_CODE <- paste0(df_clean$SEC_SES_YR, df_clean$SEC_SES_CD)
+df_clean <- df_clean[,-(15:16)]
+
+# Removing 2023 grades (not included) [also does nothing bc ^ cleans it out]
+#df_clean <- subset(df_clean, SEC_SES_YR < 2022.5)
+
+
+# for if we want only BSc students (better to keep all data in)
+#df_bsc <- df_clean[df_clean$DEGR_PGM_CD=="BSC-O",]
+
+
+df_bsc
+```
+
+```{r loading cleaned student-data}
+load("student-data.RData")
+head(df_bsc)
+```
+
+```{r finding number of times courses were taken, eval=FALSE}
+# Determining how many bsc students took each course
+unique(df_clean$COURSE_CODE)|>length()
+# making a table indicating the number of times each course was taken
+courses_taken_bsc <- table(df_bsc$COURSE_CODE)
+
+# previous lines of code
+# sorted_courses_taken_bsc <- sort(courses_taken_bsc, decreasing = TRUE)[1:200]
+# sorted_courses_taken_bsc <- sort(courses_taken_bsc, decreasing = TRUE)
+# sorted_courses_taken_bsc <- sorted_courses_taken_bsc[substr(names(sorted_courses_taken_bsc),1,4) %in% c("DATA","MATH",
+                                                   # "COSC","STAT")]
+
+# current line which removes any courses not taken at least 10 times
+sorted_courses_taken_bsc <- sort(courses_taken_bsc[courses_taken_bsc >= 10], decreasing = TRUE)
+
+# barplot showing # of times a course is taken
+barplot(sorted_courses_taken_bsc)
+# saving the course names of those which remain
+course_names <- dimnames(sorted_courses_taken_bsc)[[1]]
+
+# Subsetting on only courses which are taken 10 or more times ("relevant courses")
+df_bsc_relevant_courses <- df_bsc[df_bsc$COURSE_CODE %in% course_names, ]
+
+# Getting a list of all student ids which took relevant courses
+uniqueids <- unique(df_bsc_relevant_courses$STUD_NO_ANONYMOUS)
+```
+
+```{r counting course retake occurences, eval=FALSE}
+# finding student who've taken a course more than once
+duplicate_rows <- df_bsc_relevant_courses[duplicated(df_bsc_relevant_courses[c("STUD_NO_ANONYMOUS", "COURSE_CODE")]) | duplicated(df_bsc_relevant_courses[c("STUD_NO_ANONYMOUS", "COURSE_CODE")], fromLast = TRUE), ]
+duplicate_rows[c(1,15,12,13)]
+
+# Count occurrences of each course for each student
+course_counts <- table(duplicate_rows$STUD_NO_ANONYMOUS, duplicate_rows$COURSE_CODE)
+
+# Find the maximum number of times each course was taken by any student
+max_repeats <- apply(course_counts, 2, max)
+
+# Combine course names with corresponding maximum counts
+max_course_counts_df <- data.frame(COURSE_CODE = names(max_repeats), max_repeats)
+```
+
+```{r creating list of course column names .1 .2, eval=FALSE}
+# Creating a new list of course column names
+## eg. Math.101.1, Math.101.2...
+
+## want a list of course names with the .1 .2 .3
+# groups: Non-Repeats, Repeats
+# Non-repeats
+non_rep_courses <- setdiff(course_names,max_course_counts_df$COURSE_CODE)
+
+# Repeats
+# Modify course names for repeated courses
+rep_courses <- c()
+for (i in 1:nrow(max_course_counts_df)) {
+  for (j in 1:max_course_counts_df[i,2]) {
+    rep_courses <- append(rep_courses, paste0(max_course_counts_df[i,1], ".", j))
+  }
+}
+
+course_names_dups <- append(non_rep_courses, rep_courses)
+```
+
+```{r finding student majors and minors, eval=TRUE}
+# Finding student majors and minors
+### WARNING: no 2023 data yet which may contain updates to major/minors
+
+
+# looking through/ getting last row of each student
+library(dplyr)
+
+# Assuming your dataframe is called 'df'
+
+# Group by student_id and get the last row of each group
+last_rows <- df_bsc_relevant_courses %>%
+  group_by(STUD_NO_ANONYMOUS) %>%
+  slice(n())
+
+
+# Create a data frame with NA values and course column names
+new_columns <- data.frame(matrix(NA, nrow = nrow(last_rows), ncol = 4))
+
+
+# Add course name columns to existing data frame
+student_mm <- cbind(last_rows[,1], new_columns)
+colnames(student_mm) <- c("StudentID", "Major.1", "Major.2", "Minor", "Honors")
+student_mm$Honors <- FALSE
+
+for(i in 1:nrow(last_rows)){
+  # If MAJ is in column 1, major.1 is that subject
+  if(last_rows[i,]$CURR_SPEC_PRIM_PGM_TYPE_1=="MAJ"){
+    student_mm[i,]$Major.1 <- last_rows[i,]$CURR_SPEC_PRIM_SUBJECT_1
+  }
+  
+  # if MAJ is in col 2, check if major.1 is occupied and place it in maj.1 or maj.2
+  if(last_rows[i,]$CURR_SPEC_PRIM_PGM_TYPE_2=="MAJ" & is.na(student_mm[i,]$Major.1)){
+    student_mm[i,]$Major.1 <- last_rows[i,]$CURR_SPEC_PRIM_SUBJECT_2
+  } else if (last_rows[i,]$CURR_SPEC_PRIM_PGM_TYPE_2=="MAJ"){
+    student_mm[i,]$Major.2 <- last_rows[i,]$CURR_SPEC_PRIM_SUBJECT_2
+  }
+  
+  # combined majors....
+  
+  # finding that minor
+  if(last_rows[i,]$CURR_SPEC_PRIM_PGM_TYPE_1=="MIN"){
+    student_mm[i,]$Minor <- last_rows[i,]$CURR_SPEC_PRIM_SUBJECT_1
+  } else if (last_rows[i,]$CURR_SPEC_PRIM_PGM_TYPE_2=="MIN"){
+    student_mm[i,]$Minor <- last_rows[i,]$CURR_SPEC_PRIM_SUBJECT_2
+  }
+  
+  # adding Honors as majors
+  if(last_rows[i,]$CURR_SPEC_PRIM_PGM_TYPE_1=="HON" & is.na(student_mm[i,]$Major.1)){
+    student_mm[i,]$Major.1 <- last_rows[i,]$CURR_SPEC_PRIM_SUBJECT_1
+    student_mm[i,]$Honors <- TRUE
+  } else if (last_rows[i,]$CURR_SPEC_PRIM_PGM_TYPE_1=="HON" & is.na(student_mm[i,]$Major.2)){
+    student_mm[i,]$Major.2 <- last_rows[i,]$CURR_SPEC_PRIM_SUBJECT_1
+    student_mm[i,]$Honors <- TRUE
+  }
+  if(last_rows[i,]$CURR_SPEC_PRIM_PGM_TYPE_2=="HON" & is.na(student_mm[i,]$Major.1)){
+    student_mm[i,]$Major.1 <- last_rows[i,]$CURR_SPEC_PRIM_SUBJECT_2
+    student_mm[i,]$Honors <- TRUE
+  } else if (last_rows[i,]$CURR_SPEC_PRIM_PGM_TYPE_2=="HON" & is.na(student_mm[i,]$Major.2)){
+    student_mm[i,]$Major.2 <- last_rows[i,]$CURR_SPEC_PRIM_SUBJECT_2
+    student_mm[i,]$Honors <- TRUE
+  }
+  
+  # adding combined majors
+  if(last_rows[i,]$CURR_SPEC_PRIM_PGM_TYPE_1=="CMJ"){
+    student_mm[i,]$Major.1 <- last_rows[i,]$CURR_SPEC_PRIM_SUBJECT_1
+    student_mm[i,]$Major.2 <- last_rows[i,]$CURR_SPEC_SECN_SUBJECT_1
+  } else if (last_rows[i,]$CURR_SPEC_PRIM_PGM_TYPE_2=="CMJ" & !is.na(student_mm[i,]$Major.1)){
+    student_mm[i,]$Major.2 <- last_rows[i,]$CURR_SPEC_PRIM_SUBJECT_2
+  }
+  
+}
+head(student_mm)
+```
+
+### Structure
+### Using retake course grades
+### Using most recent course grades
+```{r}
+load("StudentGrades.RData")
+```
+
+
+## Professor data
+### Cleaning process
+```{r}
+load("course_profs.RData")
+load("cleaned_profs.RData")
+```
+
+### Professor selection process
+### Data structure
+```{r}
+load(file="Prof_StudentGrades.RData")
+```
+
+
+
+
+# Analysis and Prediction
+
+## Initial attempts
+### MissForest
+### Random Forest
+### Gradient Boosted Machines
+### Matrix Factorization
+### Structured Learning
+### Support Vector Machines
+### Recursive Feature Elimination
+### LASSO Feature Selection
+
+## Variations
+###
+
+## Plots
+### Predicted grades vs Actual grades
+### Heatmap
+
+## Determining Error
+### QQ-plots
+### Bootstrapping
+
+
+```{r}
+
+```
+
+
+# 

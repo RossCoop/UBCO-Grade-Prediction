@@ -56,6 +56,10 @@ df_bsc <- df_clean
 
 df_bsc
 ```
+```{r}
+save(df_bsc, file = "student-data.RData")
+```
+
 
 ```{r}
 # Determining how many bsc students took each course
@@ -549,6 +553,7 @@ non_null_counts <- apply(studentgrades[, -1], 1, function(row) sum(!is.na(row)))
 # Create a new dataframe with student ID and non-null counts
 result_df <- data.frame(student_id = studentgrades[, 1], non_null_count = non_null_counts)
 
+# Return student with at least 3 grades in studentgrades
 result_df[result_df$non_null_count >= 3,]
 ```
 
@@ -896,8 +901,7 @@ gbm_params <- list(
   n.minobsinnode = 10          # Minimum number of observations in terminal nodes
 )
 
-# ****CURRENT ERROR****** currently is stopping as some columns only contain few grades (only existing in test set) no bueno and cant train.
-# TODO: remove those cols with few data
+
 gbm_model <- gbm(STAT.230.1 ~ ., data = stat230grades[train_indices,], distribution = gbm_params$distribution,
                  n.trees = gbm_params$n.trees, interaction.depth = gbm_params$interaction.depth,
                  shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
@@ -1161,7 +1165,7 @@ n_rows <- nrow(coursegrades)
 train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
 test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
 
-cols_to_na <- column_names[column_digits == YOI] #### ADD BACK COURSE OF INTEREST!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+cols_to_na <- column_names[column_digits == YOI] #### ADD BACK COURSE OF INTEREST!!!!!!!
 cols_to_na <- cols_to_na[!cols_to_na == COI]
 coursegrades[test_indices, which(names(coursegrades) %in% cols_to_na)] <- NA
 ```
