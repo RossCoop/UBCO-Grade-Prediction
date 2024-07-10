@@ -452,7 +452,7 @@ for (i in 1:nrow(df_bsc_relevant_courses)){
   studentgrades_prof[studentgrades_prof$Student_ID==df_bsc_relevant_courses[i,]$STUD_NO_ANONYMOUS,coursecol+prof_column_adjust] <- matching_profs[i]
 }
 
-studentgrades_prof
+studentgrades_prof[,880:890]
 ```
 
 
