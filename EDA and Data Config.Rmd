@@ -249,7 +249,7 @@ for (i in 1:nrow(df_bsc_relevant_courses)){
 
 studentgrades[,c("Student_ID","MATH.101.1","MATH.101.2")]
 
-
+save(studentgrades, file = "studentgrades_1.RData")
 ```
 
 ```{r Making studentgrades using most recent grade}
@@ -630,16 +630,20 @@ course_averages <- data.frame(Courses = course_names_dups, Average = rep(NA, len
 for (i in 1:nrow(course_averages)){
   course_averages[i,]$Average <- mean(studentgrades[,course_averages[i,1]],na.rm = TRUE)
 }
+
+# barplot of all course average grades
+barplot(course_averages$Average, names.arg = course_averages$Courses)
+
+# average grades for each course
+head(course_averages)
 ```
 
 ```{r}
-barplot(course_averages$Average, names.arg = course_averages$Courses)
-
 subset(course_averages, Courses == "PSYO.380.4")
 
 studentgrades[!is.na(studentgrades$PSYO.380.4),c("Student_ID","PSYO.380.4")]
 
-course_averages
+
 ```
 
 ```{r}
@@ -649,6 +653,7 @@ studentgrades[!is.na(studentgrades$STAT.230.1),c("Student_ID","MATH.100.1","MATH
 
 plot(studentgrades[!is.na(studentgrades$STAT.230.1),c("Student_ID","MATH.100.1","MATH.101.1","DATA.101.1","STAT.230.1")])
 ```
+
 ```{r}
 plot(studentgrades[!is.na(studentgrades$MATH.100.1)&!is.na(studentgrades$MATH.101.1),c("MATH.100.1","MATH.101.1")])
 
@@ -964,28 +969,6 @@ cols_to_keep <- column_names[column_digits <= YOI]
 
 # All columns in the same year or below
 coursegrades <- coursegrades[, colnames(coursegrades) %in% cols_to_keep]
-
-# extras/ to do next
-# grade_counts <- colSums(!is.na(coursegrades))
-# Subset columns with less than 10 grades
-# sparse_cols <- names(grade_counts[grade_counts <= 5])
-
-# # Need to exclude future attempts at the course, but not past
-# ## eg. PSYO.380.1 shouldn't use 380.2 as a predictor, but 380.2 can use 380.1
-# if(length(strsplit(COI, split = ".", fixed = TRUE)[[1]]) == 3){
-#   cname <- strsplit(COI, split = ".", fixed = TRUE)[[1]][1]
-#   cnum <- strsplit(COI, split = ".", fixed = TRUE)[[1]][2]
-#   crep <- as.integer(strsplit(COI, split = ".", fixed = TRUE)[[1]][3])
-#   # remove all future instances of course (if they exist)
-#   for(i in 1:length(column_names)){
-#     if(strsplit(column_names[i], split = ".", fixed = TRUE)[[1]][1] == cname & strsplit(column_names[i], split = ".", fixed = TRUE)[[1]][2] == cnum & as.integer(strsplit(column_names[i], split = ".", fixed = TRUE)[[1]][3]) > crep){
-#       sparse_cols <- append(sparse_cols, column_names[i])
-#     }
-#   }
-# }
-
-# Subset the dataframe to include only courses used to predict on
-# coursegrades <- coursegrades[, -which(names(coursegrades) %in% sparse_cols)]
 ```
 
 

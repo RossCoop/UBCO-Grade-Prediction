@@ -201,9 +201,11 @@ rmse
 actual <- coursegrades[test_indices,]$COSC.221
 plot(actual, predictions, xlab = "Actual Grades", ylab = "Predicted Grades", 
      main = "Predicted vs Actual Grades", pch = 16, col = "blue", xlim = c(0,100), ylim = c(0,100))
+
+# this line represents 'perfect prediction' where actual grades = predicted grades
 abline(0, 1, col = "red")
 
-
+# creating and drawing line of best fit on the predicted data
 line.lm <- lm(predictions~actual)
 abline(line.lm, col = "green")
 ```

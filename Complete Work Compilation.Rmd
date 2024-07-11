@@ -210,48 +210,1020 @@ for(i in 1:nrow(last_rows)){
 head(student_mm)
 ```
 
+
+
+
+
 ### Structure
 ### Using retake course grades
-### Using most recent course grades
-```{r}
-load("StudentGrades.RData")
+```{r Making studentgrades with .1 .2 etc, eval=FALSE}
+# Making the Data Frame
+ ## Columns to add: Student ID, Major, Honors, Minor, Extras, 200 most common courses
+
+# Building df after getting the data
+
+studentgrades <- data.frame(Student_ID = sort(uniqueids))
+
+
+
+
+# Create a data frame with NA values and course column names
+new_columns <- data.frame(matrix(NA, nrow = nrow(studentgrades), ncol = length(course_names_dups)))
+colnames(new_columns) <- course_names_dups
+
+# Add course name columns to existing data frame
+studentgrades <- cbind(studentgrades, student_mm[,-1], new_columns)
+
+
+# Saving student grades into df
+for (i in 1:nrow(df_bsc_relevant_courses)){
+  rep <- 0
+  # finding the index of course name .1
+  coursecol <- grep(df_bsc_relevant_courses[i,]$COURSE_CODE, colnames(studentgrades))[1]
+  
+  # Moving over from .1 to .2 columns if a grade already exists
+  while(!is.na(studentgrades[studentgrades$Student_ID==df_bsc_relevant_courses[i,]$STUD_NO_ANONYMOUS,coursecol+rep])){
+    rep = rep+1
+  }
+  
+  # Saving student grade into studentgrades df
+  studentgrades[studentgrades$Student_ID==df_bsc_relevant_courses[i,]$STUD_NO_ANONYMOUS,coursecol+rep] <- df_bsc_relevant_courses[i,]$HDR_CRS_PCT_GRD
+}
+
+studentgrades[,c("Student_ID","MATH.101.1","MATH.101.2")]
+
+
 ```
 
+```{r loading studentgrades with .1 .2}
+load(file = "studentgrades_1.RData")
+head(studentgrades)
+```
+
+This variation of studentgrades has each student represented as rows, and courses as columns. Course grades are recorded for each attempt a student takes at each course and creates new columns for new grades. For example, MATH 101 has 3 columns: MATH.101.1, MATH.101.2, MATH.101.3. One for each new attempt at MATH 101
+
+### Using most recent course grades
+```{r Making studentgrades using most recent grade, eval=FALSE}
+studentgrades <- data.frame(Student_ID = sort(uniqueids))
+
+# Create a data frame with NA values and course column names
+new_columns <- data.frame(matrix(NA, nrow = nrow(studentgrades), ncol = length(course_names)))
+colnames(new_columns) <- course_names
+
+# Add course name columns to existing data frame
+studentgrades <- cbind(studentgrades, student_mm[,-1], new_columns)
+
+
+# Saving student grades into df
+for (i in 1:nrow(df_bsc_relevant_courses)){
+  
+  # finding the index of course name .1
+  coursecol <- grep(df_bsc_relevant_courses[i,]$COURSE_CODE, colnames(studentgrades))[1]
+  
+  # Saving student grade into studentgrades df
+  studentgrades[studentgrades$Student_ID==df_bsc_relevant_courses[i,]$STUD_NO_ANONYMOUS,coursecol] <- df_bsc_relevant_courses[i,]$HDR_CRS_PCT_GRD
+}
+
+studentgrades
+```
+
+```{r loading studentgrades using most recent grade}
+load("StudentGrades.RData")
+head(studentgrades)
+```
+
+This variation of studentgrades has each student represented as rows, and courses as columns. Only the most recent attempt at each course is recorded. For example, MATH 101 has only one column: MATH.101
 
 ## Professor data
 ### Cleaning process
-```{r}
+```{r compiling prof csv data, eval=FALSE}
+# getting all file names in UBCO-Profs folder
+file_names <- dir(path = "UBCO-Profs")
+
+# full prof dataframe
+course_profs <- data.frame(Professor=character(), year_code=character(), course_name=character(), Section=character())
+
+for(i in 1:length(file_names)){
+  # Try to open the file connection
+  file_connection <- try(read.csv(paste0("UBCO-Profs/", file_names[i])), silent = TRUE)
+
+  # Check if the connection was successful
+  if (inherits(file_connection, "try-error")) {
+    
+  } else {
+    df <- file_connection
+    df$course_name <- paste(file_connection$Subject, file_connection$Course, sep = ".")
+    df$year_code <- paste0(file_connection$Year, file_connection$Session)
+    df <- df[,c("Professor", "year_code", "course_name", "Section")]
+    
+    course_profs <- rbind(course_profs, df)
+  }
+
+}
+
+# both of these have no prof names
+course_profs <- course_profs[course_profs$Section != "OVERALL",]
+course_profs <- course_profs[course_profs$Professor != "",]
+
+save(course_profs, file = "course_profs.RData")
+```
+
+```{r adjusting prof data table, eval=FALSE}
+# all unique 'professor' names
+prof_names_full_data <- course_profs$Professor
+# length
+len <- length(prof_names_full_data)
+
+# empty vectors
+prof_names_all <- character()
+prof_lens <- numeric()
+
+# looping through to fill two vectors
+for(i in 1:len){
+  # adding all names to a pile of names (yes duplicates)
+  prof_names_all <-  c(prof_names_all, strsplit(prof_names_full_data[i], ";")[[1]])
+  # adding each unique 'professor' name's length (ie. # of profs)
+  prof_lens <- c(prof_lens, length(strsplit(prof_names_full_data[i], ";")[[1]]))
+}
+
+# DF of all 'prof' names with more than one person
+# course_profs[which(prof_lens > 1),]
+
+
+# creating a table count of # of times profs taught
+prof_table <- table(prof_names_all)
+ordered_profs <- sort(prof_table, decreasing = TRUE)
+```
+
+```{r making table of courses and their professors, eval=FALSE}
+# making a new table to join on (to student grades)
+rel_course_profs <- course_profs
+ordered_prof_names <- rownames(ordered_profs)
+
+
+# loop through all rows
+for(r in 1:nrow(rel_course_profs)){
+  
+  # if professor has more than one prof
+  if(length(strsplit(rel_course_profs[r,"Professor"],";")[[1]]) > 1){
+    
+    # loop through prof names to save first one which appears
+    for(i in 1:length(ordered_prof_names)){
+      
+      # checking if current ordered prof is in list of profs
+      if(ordered_prof_names[i] %in% strsplit(rel_course_profs[r,"Professor"],";")[[1]]){
+          rel_course_profs[r,"Professor"] <- ordered_prof_names[i]
+          break
+      }
+      
+    }
+  }
+    
+}
+
+
+save(rel_course_profs, file = "cleaned_profs.RData")
+```
+
+```{r loading professor cleaning and final data}
+# course_profs
 load("course_profs.RData")
+# rel_course_profs
 load("cleaned_profs.RData")
 ```
 
+The dataframe rel_course_profs contains rows containing the Professor, Year, Course name, and Section for each course and section from 2018S to 2023S.
+
 ### Professor selection process
 ### Data structure
-```{r}
+
+```{r adding profs to studentgrades *OLD*, eval=FALSE}
+courses <- unique(rel_course_profs$course_name)
+courses <- colnames(studentgrades[,colnames(studentgrades) %in% courses])
+
+courseprof_cols <- c(courses, paste0(courses,".P"))
+
+
+# cbind(studentgrades[,c(1:5)],studentgrades[,colnames(studentgrades) %in% courses])
+
+# cutting out all courses which will cause prof error
+df_bsc_relevant_courses <- df_bsc[df_bsc$COURSE_CODE %in% courses,]
+
+# adding in professors
+matching_profs <- character()
+for(i in 1:nrow(df_bsc_relevant_courses)){
+  if(length(rel_course_profs[rel_course_profs$year_code == df_bsc_relevant_courses[i,"YEAR_CODE"] & 
+                   rel_course_profs$course_name == df_bsc_relevant_courses[i,"COURSE_CODE"] & 
+                   rel_course_profs$Section == df_bsc_relevant_courses[i,"SEC_NO"],]$Professor) == 0){
+    matching_profs <- c(matching_profs, NA)
+    # next
+    
+  } else {
+    matching_profs <- c(matching_profs, rel_course_profs[rel_course_profs$year_code == df_bsc_relevant_courses[i,"YEAR_CODE"] & 
+                   rel_course_profs$course_name == df_bsc_relevant_courses[i,"COURSE_CODE"] & 
+                   rel_course_profs$Section == df_bsc_relevant_courses[i,"SEC_NO"],]$Professor)
+  }
+}
+
+rel_course_profs[rel_course_profs$year_code == df_bsc_relevant_courses[i,"YEAR_CODE"] & 
+                   rel_course_profs$course_name == df_bsc_relevant_courses[i,"COURSE_CODE"] & 
+                   rel_course_profs$Section == df_bsc_relevant_courses[i,"SEC_NO"],]$Professor
+
+
+length(matching_profs)
+nrow(df_bsc_relevant_courses)
+
+# creating list of unique ids
+uniqueids <- unique(df_bsc_relevant_courses$STUD_NO_ANONYMOUS)
+
+### from another chunk
+studentgrades_prof <- data.frame(Student_ID = sort(uniqueids))
+
+# Create a data frame with NA values and course column names
+new_columns <- data.frame(matrix(NA, nrow = nrow(studentgrades_prof), ncol = length(courseprof_cols)))
+colnames(new_columns) <- courseprof_cols
+
+# Add course name columns to existing data frame
+studentgrades_prof <- cbind(studentgrades_prof, student_mm[,-1], new_columns)
+
+
+prof_column_adjust <- length(courses)
+
+# Saving student grades into df
+for (i in 1:nrow(df_bsc_relevant_courses)){
+  
+  ## we have two 36,000 length things, df_bsc_rel_courses and matching_profs
+  ## need to pull grades from df and profs from match_profs ROW BY ROW
+  ## add to studengrades_prof, can split using + length(courses) between course and prof columns
+  
+  # finding the index of course name .1
+  coursecol <- grep(df_bsc_relevant_courses[i,]$COURSE_CODE, colnames(studentgrades_prof))[1]
+  
+  # Saving student grade into studentgrades_prof df
+  studentgrades_prof[studentgrades_prof$Student_ID==df_bsc_relevant_courses[i,]$STUD_NO_ANONYMOUS,coursecol] <- df_bsc_relevant_courses[i,]$HDR_CRS_PCT_GRD
+  
+  # saving prof name into studentgrades_prof df
+  studentgrades_prof[studentgrades_prof$Student_ID==df_bsc_relevant_courses[i,]$STUD_NO_ANONYMOUS,coursecol+prof_column_adjust] <- matching_profs[i]
+}
+
+studentgrades_prof[,880:890]
+```
+
+```{r creating studentgrades_prof, eval=FALSE}
+# creating all columns to be used in studentgrades_prof
+# course_names from 'finding number of times courses were taken' chunk
+courseprof_cols <- c(course_names, paste0(course_names,".P"))
+
+
+# creating list of unique ids
+uniqueids <- unique(df_bsc_relevant_courses$STUD_NO_ANONYMOUS)
+
+### from another chunk
+studentgrades_prof <- data.frame(Student_ID = sort(uniqueids))
+
+# Create a data frame with NA values and course column names
+new_columns <- data.frame(matrix(NA, nrow = nrow(studentgrades_prof), ncol = length(courseprof_cols)))
+colnames(new_columns) <- courseprof_cols
+
+# Add course name columns to existing data frame
+studentgrades_prof <- cbind(studentgrades_prof, student_mm[,-1], new_columns)
+
+
+prof_column_adjust <- length(course_names)
+
+# Saving student grades into df
+for (i in 1:nrow(df_bsc_relevant_courses)){
+  
+  
+  # finding the index of course name
+  coursecol <- grep(df_bsc_relevant_courses[i,]$COURSE_CODE, colnames(studentgrades_prof))[1]
+  
+  # Saving student grade into studentgrades_prof df
+  studentgrades_prof[studentgrades_prof$Student_ID==df_bsc_relevant_courses[i,]$STUD_NO_ANONYMOUS,coursecol] <- df_bsc_relevant_courses[i,]$HDR_CRS_PCT_GRD
+  
+  # catching if there is no prof for course
+  if(length(rel_course_profs[rel_course_profs$year_code == df_bsc_relevant_courses[i,"YEAR_CODE"] & 
+                   rel_course_profs$course_name == df_bsc_relevant_courses[i,"COURSE_CODE"] & 
+                   rel_course_profs$Section == df_bsc_relevant_courses[i,"SEC_NO"],]$Professor) == 1){
+    
+    
+    # saving prof name into studentgrades_prof df
+  studentgrades_prof[studentgrades_prof$Student_ID==df_bsc_relevant_courses[i,]$STUD_NO_ANONYMOUS,coursecol+prof_column_adjust] <- rel_course_profs[rel_course_profs$year_code == df_bsc_relevant_courses[i,"YEAR_CODE"] & 
+                   rel_course_profs$course_name == df_bsc_relevant_courses[i,"COURSE_CODE"] & 
+                   rel_course_profs$Section == df_bsc_relevant_courses[i,"SEC_NO"],]$Professor
+  }
+  
+  # catching if there are more than one prof showed (PSYO 380 since it's missing 'Detail' in main student grades csv)
+  if(length(rel_course_profs[rel_course_profs$year_code == df_bsc_relevant_courses[i,"YEAR_CODE"] & 
+                   rel_course_profs$course_name == df_bsc_relevant_courses[i,"COURSE_CODE"] & 
+                   rel_course_profs$Section == df_bsc_relevant_courses[i,"SEC_NO"],]$Professor) > 1){
+    
+    
+    # saving prof name into studentgrades_prof df
+  studentgrades_prof[studentgrades_prof$Student_ID==df_bsc_relevant_courses[i,]$STUD_NO_ANONYMOUS,coursecol+prof_column_adjust] <- rel_course_profs[rel_course_profs$year_code == df_bsc_relevant_courses[i,"YEAR_CODE"] & 
+                   rel_course_profs$course_name == df_bsc_relevant_courses[i,"COURSE_CODE"] & 
+                   rel_course_profs$Section == df_bsc_relevant_courses[i,"SEC_NO"],]$Professor[1]
+  }
+  
+  
+}
+
+studentgrades_prof
+
+
+# removing columns with no or one prof
+cols_to_remove <- numeric(0)
+for(i in (prof_column_adjust+6):ncol(studentgrades_prof)){
+  if(length(unique(studentgrades_prof[,i])) <= 2){
+    cols_to_remove <- c(cols_to_remove, i)
+  }
+}
+
+studentgrades_prof <- studentgrades_prof[,-cols_to_remove]
+
+
+# factoring professor columns
+for(i in (prof_column_adjust+6):ncol(studentgrades_prof)){
+  studentgrades_prof[,i] <- factor(studentgrades_prof[,i])
+}
+
+save(studentgrades_prof, file="Prof_StudentGrades.RData")
+```
+
+```{r loading studentgrades_prof}
+# studentgrades_prof
 load(file="Prof_StudentGrades.RData")
 ```
 
-
-
+The dataframe studentgrades_prof is similar to studentgrades (most recent grades version) in that students grades are saved as rows, and each columns is a different course. Additionally, there are columns which contain the professors who taught each course there is a grade for. For example, Student X has a grade in the MATH.101 column and will therefore have a professor in the MATH.101.P column. Student Y who has not taken MATH 101 will not have a grade in MATH.101, nor a professor in MATH.101.P.
 
 # Analysis and Prediction
 
-## Initial attempts
+## Initial EDA
+```{r loading studentgrades with .1 .2 for initial EDA}
+load(file = "studentgrades_1.RData")
+```
+
+```{r plot of MATH.100.1 against MATH.100.2}
+# Big ol graph of student grades
+maths <- studentgrades[complete.cases(studentgrades$MATH.100.1, studentgrades$MATH.100.2), ]
+
+
+maths.lm <- lm(maths$MATH.100.1~ maths$MATH.100.2)
+summary(maths.lm)
+
+plot(maths$MATH.100.1, maths$MATH.100.2)
+abline(maths.lm)
+
+## weird....
+```
+
+```{r plot of MATH.100.1 against STAT.230.1}
+mathstat <- studentgrades[complete.cases(studentgrades$MATH.100.1, studentgrades$STAT.230.1), ]
+
+mathstat.lm <- lm(mathstat$MATH.100.1~ mathstat$STAT.230.1)
+summary(mathstat.lm)
+
+plot(mathstat$MATH.100.1, mathstat$STAT.230.1)
+abline(mathstat.lm)
+
+## this one is a little more normal
+## could be issues with course retakers
+
+## want to check on people who only had to take it once...
+```
+
+```{r plot of MATH.100.1 against PSYO.111.1}
+edasubset <- studentgrades[complete.cases(studentgrades$MATH.100.1, studentgrades$PSYO.111.1), ]
+
+edasubset.lm <- lm(edasubset$MATH.100.1~ edasubset$PSYO.111.1)
+summary(edasubset.lm)
+
+plot(edasubset$MATH.100.1, edasubset$PSYO.111.1)
+abline(edasubset.lm)
+
+## ... makes sense that some courses like PSYO 111 are grade boosters
+```
+
+```{r plot of MATH.100.2 against STAT.230.1}
+mathstat2 <- studentgrades[complete.cases(studentgrades$MATH.100.2, studentgrades$STAT.230.1), ]
+
+mathstat2.lm <- lm(mathstat2$MATH.100.2~ mathstat2$STAT.230.1)
+summary(mathstat2.lm)
+
+plot(mathstat2$MATH.100.2, mathstat2$STAT.230.1)
+abline(mathstat2.lm)
+```
+
+```{r plot of MATH.100.1 (no MATH.100.2 grade present) againt STAT.230.1}
+
+## want to check on people who only had to take it once (aka no MATH.100.2 grade present)
+
+firsttimer <- anti_join(mathstat,mathstat2)
+first.lm <- lm(firsttimer$MATH.100.1~ firsttimer$STAT.230.1)
+summary(first.lm)
+
+plot(firsttimer$MATH.100.1, firsttimer$STAT.230.1, xlim = c(0,100))
+abline(first.lm)
+
+# just removed the 'low' grades (p much all fails) 
+```
+
+```{r finding average grades for each course}
+# want the average grade for each course... bar plot
+course_averages <- data.frame(Courses = course_names_dups, Average = rep(NA, length(course_names_dups)))
+
+for (i in 1:nrow(course_averages)){
+  course_averages[i,]$Average <- mean(studentgrades[,course_averages[i,1]],na.rm = TRUE)
+}
+
+# barplot of all course average grades
+barplot(course_averages$Average, names.arg = course_averages$Courses)
+
+# average grades for each course
+head(course_averages)
+```
+
+```{r pairplot of MATH.100.1, MATH.101.1, STAT.230.1, DATA.101.1}
+# pairplot using data which has no missing grades from these courses
+plot(studentgrades[!is.na(studentgrades$MATH.100.1)&!is.na(studentgrades$MATH.101.1)&!is.na(studentgrades$STAT.230.1)&!is.na(studentgrades$DATA.101.1),c("Student_ID","MATH.100.1","MATH.101.1","STAT.230.1","DATA.101.1")])
+
+# studentgrades data which has no missing STAT.230 grades
+studentgrades[!is.na(studentgrades$STAT.230.1),c("Student_ID","MATH.100.1","MATH.101.1","DATA.101.1","STAT.230.1")]
+
+# pairplot using data which has no missing STAT.230 grades
+plot(studentgrades[!is.na(studentgrades$STAT.230.1),c("Student_ID","MATH.100.1","MATH.101.1","DATA.101.1","STAT.230.1")])
+```
+
+```{r plot of MATH.100.1 against MATH.101.1}
+plot(studentgrades[!is.na(studentgrades$MATH.100.1)&!is.na(studentgrades$MATH.101.1),c("MATH.100.1","MATH.101.1")])
+```
+
+
+## First Prediction Attempts
 ### MissForest
+```{r missForest Impute into RF on course first attempts, eval=TRUE}
+# preparing all student grades with stat230
+stat230grades <- studentgrades[!is.na(studentgrades$STAT.230.1),c("Student_ID","MATH.100.1","MATH.101.1","STAT.230.1","MATH.200.1","MATH.221.1","COSC.211.1","COSC.222.1","COSC.221.1")]
+stat230grades
+
+library(missForest)
+library(randomForest)
+
+n_rows <- nrow(stat230grades)
+
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+
+
+stat230.imputed <- missForest(stat230grades[,2:5])$ximp
+
+stat230.rf <- randomForest(STAT.230.1~., data=stat230.imputed[train_indices,] )
+stat230.pred <- predict(stat230.rf, newdata = stat230.imputed[test_indices,])
+
+stat230.real <- stat230grades[test_indices,]$STAT.230.1
+
+# MSE value to compare to other models
+mse <- mean((stat230.pred - stat230.real)^2)
+mse
+```
+
+```{r missForest Impute into RF NEW USING NEW studentgrades, eval=TRUE}
+# preparing all student grades with stat230
+stat230grades <- studentgrades[!is.na(studentgrades$STAT.230),c("Student_ID","MATH.100","MATH.101","STAT.230","MATH.200","MATH.221","COSC.211","COSC.222","COSC.221")]
+stat230grades
+
+library(missForest)
+library(randomForest)
+
+n_rows <- nrow(stat230grades)
+
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+
+
+stat230.imputed <- missForest(stat230grades[,2:5])$ximp
+
+stat230.rf <- randomForest(STAT.230~., data=stat230.imputed[train_indices,] )
+stat230.pred <- predict(stat230.rf, newdata = stat230.imputed[test_indices,])
+
+stat230.real <- stat230grades[test_indices,]$STAT.230
+
+# MSE value to compare to other models
+mse <- mean((stat230.pred - stat230.real)^2)
+mse
+```
+
+```{r missForest Impute into RF using more courses, eval=TRUE}
+load("StudentGrades.RData")
+
+set.seed(5934)
+# preparing all student grades with stat230
+stat230grades <- studentgrades[!is.na(studentgrades$STAT.230),c("Student_ID","MATH.100","MATH.101","STAT.230","MATH.200","MATH.221","COSC.211","COSC.222","COSC.221")]
+stat230grades
+
+library(missForest)
+library(randomForest)
+
+n_rows <- nrow(stat230grades)
+
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+
+
+stat230.imputed <- missForest(stat230grades[,2:9])$ximp
+
+stat230.rf <- randomForest(STAT.230~., data=stat230.imputed[train_indices,] )
+stat230.pred <- predict(stat230.rf, newdata = stat230.imputed[test_indices,])
+
+stat230.real <- stat230grades[test_indices,]$STAT.230
+
+# MSE value to compare to other models
+mse <- mean((stat230.pred - stat230.real)^2)
+mse
+
+# graphs
+## predicted vs actual plot
+predictions <- stat230.pred
+actual <- stat230.real
+
+actual <- coursegrades[test_indices,]$STAT.230
+plot(actual, predictions, xlab = "Actual Grades", ylab = "Predicted Grades", 
+     main = "Predicted vs Actual Grades", pch = 16, col = "blue", xlim = c(0,100), ylim = c(0,100))
+abline(0, 1, col = "red")
+
+line.lm <- lm(predictions~actual)
+abline(line.lm, col = "green")
+
+
+## residuals plot
+residuals <- actual - predictions
+plot(predictions, residuals, xlab = "Predicted Grades", ylab = "Residuals", 
+     main = "Residual Plot", pch = 16, col = "blue")
+abline(h = 0, col = "red")
+
+line.lm <- lm(residuals~predictions)
+abline(line.lm, col = "green")
+
+
+## qq plots
+qqnorm(residuals, main = "Normal Q-Q Plot of Residuals")
+qqline(residuals, col = "red")
+
+
+# reload .1 .2 grades to not mess up later chunks
+load(file = "studentgrades_1.RData")
+```
+
 ### Random Forest
+```{r RF on all non-NA data, eval=TRUE}
+# getting all students with grades in all courses
+stat230grades.full <- studentgrades[!is.na(studentgrades$MATH.100.1)&!is.na(studentgrades$MATH.101.1)&!is.na(studentgrades$STAT.230.1)&!is.na(studentgrades$DATA.101.1),c("Student_ID","MATH.100.1","MATH.101.1","STAT.230.1","DATA.101.1")]
+stat230grades.full
+
+n_rows <- nrow(stat230grades.full)
+
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+library(randomForest)
+
+stat230.rf <- randomForest(STAT.230.1~., data=stat230grades.full[train_indices,2:5] )
+stat230.pred <- predict(stat230.rf, newdata = stat230grades.full[test_indices,2:5])
+
+stat230.real <- stat230grades.full[test_indices,2:5]$STAT.230.1
+
+# MSE value to compare to other models
+mse <- mean((stat230.pred - stat230.real)^2)
+mse
+
+## MSE of data without DATA101 is 175...
+## looks like imputing data and running a randomforest is best so far
+```
+
 ### Gradient Boosted Machines
+```{r GBM on partial-NA data, eval=TRUE}
+# loading in data again
+stat230grades <- studentgrades[!is.na(studentgrades$STAT.230.1),c("Student_ID","MATH.100.1","MATH.101.1","DATA.101.1","STAT.230.1")]
+n_rows <- nrow(stat230grades)
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+library(gbm)
+
+gbm_params <- list(
+  distribution = "gaussian",  # Specify the distribution for regression
+  n.trees = 100,               # Number of trees (iterations)
+  interaction.depth = 4,       # Maximum depth of trees
+  shrinkage = 0.1,             # Learning rate (shrinkage)
+  bag.fraction = 0.5,          # Fraction of training data used for each tree
+  train.fraction = 1.0,        # Fraction of training data used for training (1.0 for full dataset)
+  n.minobsinnode = 10          # Minimum number of observations in terminal nodes
+)
+
+gbm_model <- gbm(STAT.230.1 ~ ., data = stat230grades[train_indices,2:5], distribution = gbm_params$distribution,
+                 n.trees = gbm_params$n.trees, interaction.depth = gbm_params$interaction.depth,
+                 shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
+                 train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode)
+
+# Print the summary of the trained model
+print(summary(gbm_model))
+
+# Make predictions on new data
+# Assuming 'new_data' is your new dataframe for prediction
+predictions <- predict(gbm_model, newdata = stat230grades[test_indices,2:5], n.trees = gbm_params$n.trees)
+
+# Print the predictions
+print(predictions)
+
+mse <- mean((predictions - stat230grades[test_indices,2:5]$STAT.230.1)^2)
+mse
+## 175 mse... getting worse...
+```
+
+```{r GBM on non-NA data, eval=TRUE}
+# loading in data again TRYING WITH FULL DATA
+stat230grades <- studentgrades[!is.na(studentgrades$MATH.100.1)&!is.na(studentgrades$MATH.101.1)&!is.na(studentgrades$STAT.230.1)&!is.na(studentgrades$DATA.101.1),c("Student_ID","MATH.100.1","MATH.101.1","STAT.230.1","DATA.101.1")]
+stat230grades
+n_rows <- nrow(stat230grades)
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+library(gbm)
+
+gbm_params <- list(
+  distribution = "gaussian",  # Specify the distribution for regression
+  n.trees = 100,               # Number of trees (iterations)
+  interaction.depth = 4,       # Maximum depth of trees
+  shrinkage = 0.1,             # Learning rate (shrinkage)
+  bag.fraction = 0.5,          # Fraction of training data used for each tree
+  train.fraction = 1.0,        # Fraction of training data used for training (1.0 for full dataset)
+  n.minobsinnode = 10          # Minimum number of observations in terminal nodes
+)
+
+gbm_model <- gbm(STAT.230.1 ~ ., data = stat230grades[train_indices,2:5], distribution = gbm_params$distribution,
+                 n.trees = gbm_params$n.trees, interaction.depth = gbm_params$interaction.depth,
+                 shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
+                 train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode)
+
+# Print the summary of the trained model
+print(summary(gbm_model))
+
+# Make predictions on new data
+# Assuming 'new_data' is your new dataframe for prediction
+predictions <- predict(gbm_model, newdata = stat230grades[test_indices,2:5], n.trees = gbm_params$n.trees)
+
+# Print the predictions
+print(predictions)
+
+mse <- mean((predictions - stat230grades[test_indices,2:5]$STAT.230.1)^2)
+mse
+## 128 mse which is a little better when you've got full data
+```
+
+```{r missForest impute into GBM, eval=TRUE}
+# now, does imputing the data before GBM work better?
+# preparing all student grades with stat230
+stat230grades <- studentgrades[!is.na(studentgrades$STAT.230.1),c("Student_ID","MATH.100.1","MATH.101.1","DATA.101.1","STAT.230.1")]
+stat230grades
+
+library(missForest)
+library(gbm)
+
+n_rows <- nrow(stat230grades)
+
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+
+
+stat230.imputed <- missForest(stat230grades[,2:5])$ximp
+
+gbm_params <- list(
+  distribution = "gaussian",  # Specify the distribution for regression
+  n.trees = 100,               # Number of trees (iterations)
+  interaction.depth = 4,       # Maximum depth of trees
+  shrinkage = 0.1,             # Learning rate (shrinkage)
+  bag.fraction = 0.5,          # Fraction of training data used for each tree
+  train.fraction = 1.0,        # Fraction of training data used for training (1.0 for full dataset)
+  n.minobsinnode = 10          # Minimum number of observations in terminal nodes
+)
+
+gbm_model <- gbm(STAT.230.1 ~ ., data = stat230.imputed[train_indices,], distribution = gbm_params$distribution,
+                 n.trees = gbm_params$n.trees, interaction.depth = gbm_params$interaction.depth,
+                 shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
+                 train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode)
+
+# Print the summary of the trained model
+print(summary(gbm_model))
+
+# Make predictions on new data
+# Assuming 'new_data' is your new dataframe for prediction
+predictions <- predict(gbm_model, newdata = stat230.imputed[test_indices,], n.trees = gbm_params$n.trees)
+
+# Print the predictions
+print(predictions)
+
+mse <- mean((predictions - stat230.imputed[test_indices,]$STAT.230.1)^2)
+mse
+## 109 mse.. better still
+```
+
 ### Matrix Factorization
 ### Structured Learning
 ### Support Vector Machines
 ### Recursive Feature Elimination
 ### LASSO Feature Selection
 
-## Variations
-###
+## Further work on GBM
+### Data Preperation
+```{r GBM data prep, eval=TRUE}
+# Identifying the course of interest
+COI <- "COSC.221"
+coursegrades <- studentgrades_prof[!is.na(studentgrades_prof[,COI]),-c(1,3,5)]
+
+# remove all grades < 50%
+coursegrades <- coursegrades[coursegrades$COSC.221 >= 40, ]
+# coursegrades <- coursegrades[coursegrades$COSC.221 <= 80, ]
+
+# factoring student majors
+coursegrades$Major.1 <- factor(coursegrades$Major.1)
+# factoring student minors
+coursegrades$Minor <- factor(coursegrades$Minor)
+
+
+# removing all students who don't meet course pre reqs DATA 101, COSC 221
+coursegrades <- coursegrades[!is.na(coursegrades$MATH.101) | !is.na(coursegrades$MATH.103) | !is.na(coursegrades$MATH.142), ]
+
+# coursegrades <- coursegrades[!is.na(coursegrades$MATH.101), ]
+
+
+
+# dropping columns that are very sparse (pct % are NA)
+pct <- 0.8
+courses <- numeric(0)
+for (i in 1:ncol(coursegrades)) {
+  if(is.na(coursegrades[,i]) |> sum()  > nrow(coursegrades)*pct){
+    courses <- c(courses,i)
+  }
+}
+
+coursegrades <- coursegrades[,-courses]
+
+
+
+
+
+# Removing all course columns of higher years
+YOI <- as.integer(substr(strsplit(COI, split = ".", fixed = TRUE)[[1]][2],1,1))
+
+column_names <- colnames(coursegrades)
+
+# Extract digits after the period in column names
+column_digits <- as.integer(sub("^[^.]+\\.([0-9]).*", "\\1", column_names))
+
+# Find columns with digits not matching the selected course year
+cols_to_keep <- column_names[column_digits <= YOI]
+
+# All columns in the same year or below
+coursegrades <- coursegrades[, colnames(coursegrades) %in% cols_to_keep]
+
+# display data to be used
+head(coursegrades)
+```
+
+### Analysis
+```{r finding ideal number of GBM tree graphs to use, eval=FALSE}
+library(gbm)
+
+gbm_params <- list(
+  distribution = "gaussian",  # Specify the distribution for regression
+  n.trees = 10000,               # Number of trees (iterations)
+  interaction.depth = 3,       # Maximum depth of trees
+  shrinkage = 0.001,            # Learning rate (shrinkage)
+  bag.fraction = 0.5,          # Fraction of training data used for each tree
+  train.fraction = 1.0,        # Fraction of training data used for training (1.0 for full dataset)
+  n.minobsinnode = 5          # Minimum number of observations in terminal nodes
+)
+
+# Running model first time on base params
+gbm_model <- gbm(MATH.200 ~ ., data = coursegrades, distribution = gbm_params$distribution,
+                 n.trees = gbm_params$n.trees, interaction.depth = gbm_params$interaction.depth,
+                 shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
+                 train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 5)
+
+
+print(gbm.perf(gbm_model, method="cv"))
+print(gbm.perf(gbm_model, method="OOB"))
+```
+
+```{r GBM model training, eval=TRUE}
+set.seed(5934)
+n_rows <- nrow(coursegrades)
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+library(gbm)
+
+gbm_params <- list(
+  distribution = "gaussian",  # Specify the distribution for regression
+  n.trees = 8000,               # Number of trees (iterations)
+  interaction.depth = 3,       # Maximum depth of trees
+  shrinkage = 0.005,            # Learning rate (shrinkage)
+  bag.fraction = 0.5,          # Fraction of training data used for each tree
+  train.fraction = 1.0,        # Fraction of training data used for training (1.0 for full dataset)
+  n.minobsinnode = 5          # Minimum number of observations in terminal nodes
+)
+
+# Running model first time on base params
+gbm_model <- gbm(COSC.221 ~ ., data = coursegrades, distribution = gbm_params$distribution,
+                 n.trees = gbm_params$n.trees, interaction.depth = gbm_params$interaction.depth,
+                 shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
+                 train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 5)
+
+# saving optimal # of trees
+ntrees <- gbm.perf(gbm_model,method="cv")[1]
+
+
+
+# Running model a second time with optimal # of trees
+gbm_model <- gbm(COSC.221 ~ ., data = coursegrades[train_indices,], distribution = gbm_params$distribution,
+                 n.trees = ntrees, interaction.depth = gbm_params$interaction.depth,
+                 shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
+                 train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 5)
+
+# Print the summary of the trained model
+print(summary(gbm_model))
+
+# Make predictions on new data
+predictions <- predict(gbm_model, newdata = coursegrades[test_indices,], n.trees = ntrees)
+
+rmse <- sqrt(mean((predictions - coursegrades[test_indices,COI])^2))
+rmse
+```
 
 ## Plots
 ### Predicted grades vs Actual grades
+```{r predicted grades vs actual grades, eval=TRUE}
+actual <- coursegrades[test_indices,]$COSC.221
+plot(actual, predictions, xlab = "Actual Grades", ylab = "Predicted Grades", 
+     main = "Predicted vs Actual Grades", pch = 16, col = "blue", xlim = c(0,100), ylim = c(0,100))
+
+# this line represents 'perfect prediction' where actual grades = predicted grades
+abline(0, 1, col = "red")
+
+# creating and drawing line of best fit on the predicted data
+line.lm <- lm(predictions~actual)
+abline(line.lm, col = "green")
+```
+
+### Residuals
+```{r residuals, eval=TRUE}
+residuals <- actual - predictions
+plot(predictions, residuals, xlab = "Predicted Grades", ylab = "Residuals", 
+     main = "Residual Plot", pch = 16, col = "blue")
+abline(h = 0, col = "red")
+
+line.lm <- lm(residuals~predictions)
+abline(line.lm, col = "green")
+```
+
+### Q-Q Plots
+```{r qq plots, eval=TRUE}
+qqnorm(residuals, main = "Normal Q-Q Plot of Residuals")
+qqline(residuals, col = "red")
+```
+
 ### Heatmap
+```{r conf matrix and heat map, eval=TRUE}
+library(ggplot2)
+library(caret)
+
+# Define breaks for intervals of 5
+breaks <- seq(0, 100, by = 5)
+
+# Create labels for the intervals
+labels <- paste(breaks[-length(breaks)], breaks[-1], sep = "-")
+
+actual_fac <- cut(actual, breaks = breaks, labels = labels, right = TRUE, include.lowest = TRUE)
+pred_fac <- cut(predictions, breaks = breaks, labels = labels, right = TRUE, include.lowest = TRUE)
+
+confusion_matrix <- table(actual_fac, pred_fac)
+
+
+confusion_matrix <- confusionMatrix(confusion_matrix)
+# Print the confusion matrix
+# confusion_matrix
+
+# Print recall for each class
+rec <- confusion_matrix$byClass[, "Recall"]
+prec <- confusion_matrix$byClass[, "Precision"]
+f1_score <- 2*prec*rec/(prec+rec)
+
+confusion_matrix$Freq[is.na(confusion_matrix$Freq)] <- 0
+
+# Create the heat map
+ggplot(as.data.frame(confusion_matrix$table), aes(x = actual_fac, y = pred_fac, fill = Freq)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient(low = "white", high = "red") +
+  labs(x = "Actual Grades", y = "Predicted Grades", fill = "Frequency") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  geom_tile(data = subset(as.data.frame(confusion_matrix$table), actual_fac == pred_fac),
+            aes(fill = Freq), color = "black")
+```
+
+## Data Variations on GBM
+This chunk will use students grades of the current year (eg. second year uses STAT.230 and COSC.221) to train the GBM model. However, the test set will have grades from the current year removed (eg. won't use COSC.221 as a predictor). In hindsight this isn't a great idea when using GBMs as the decision trees used won't be configured for the subset of courses used.
+```{r, eval=FALSE}
+## sets all courses of equal or higher level to NA before prediction, but after training the model
+set.seed(5934)
+# time to remove all future year courses from prediction
+COI <- "STAT.230.1"
+coursegrades <- studentgrades[!is.na(studentgrades[,COI]),-1:-5]
+
+# figuring out the year level of each course...
+YOI <- as.integer(substr(strsplit(COI, split = ".", fixed = TRUE)[[1]][2],1,1))
+
+column_names <- colnames(coursegrades)
+
+# Extract digits after the period in column names
+column_digits <- as.integer(sub("^[^.]+\\.([0-9]).*", "\\1", column_names))
+
+# Find columns with digits not matching the selected course year
+cols_to_keep <- column_names[column_digits <= YOI]
+cols_to_keep <- append(cols_to_keep, COI)
+
+# All columns in the same year or below
+coursegrades <- coursegrades[, colnames(coursegrades) %in% cols_to_keep]
+
+# extras/ to do next
+grade_counts <- colSums(!is.na(coursegrades))
+# Subset columns with less than 10 grades
+sparse_cols <- names(grade_counts[grade_counts <= 5])
+
+# Need to exclude future attempts at the course, but not past
+## eg. PSYO.380.1 shouldn't use 380.2 as a predictor, but 380.2 can use 380.1
+if(length(strsplit(COI, split = ".", fixed = TRUE)[[1]]) == 3){
+  cname <- strsplit(COI, split = ".", fixed = TRUE)[[1]][1]
+  cnum <- strsplit(COI, split = ".", fixed = TRUE)[[1]][2]
+  crep <- as.integer(strsplit(COI, split = ".", fixed = TRUE)[[1]][3])
+  # remove all future instances of course (if they exist)
+  for(i in 1:length(column_names)){
+    if(strsplit(column_names[i], split = ".", fixed = TRUE)[[1]][1] == cname & strsplit(column_names[i], split = ".", fixed = TRUE)[[1]][2] == cnum & as.integer(strsplit(column_names[i], split = ".", fixed = TRUE)[[1]][3]) > crep){
+      sparse_cols <- append(sparse_cols, column_names[i])
+    }
+  }
+}
+
+# Subset the dataframe to include only courses used to predict on
+coursegrades <- coursegrades[, -which(names(coursegrades) %in% sparse_cols)]
+
+set.seed(5934)
+n_rows <- nrow(coursegrades)
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+cols_to_na <- column_names[column_digits == YOI] #### ADD BACK COURSE OF INTEREST!!!!!!!
+cols_to_na <- cols_to_na[!cols_to_na == COI]
+coursegrades[test_indices, which(names(coursegrades) %in% cols_to_na)] <- NA
+
+library(gbm)
+
+gbm_params <- list(
+  distribution = "gaussian",  # Specify the distribution for regression
+  n.trees = 100,               # Number of trees (iterations)
+  interaction.depth = 4,       # Maximum depth of trees
+  shrinkage = 0.1,             # Learning rate (shrinkage)
+  bag.fraction = 0.5,          # Fraction of training data used for each tree
+  train.fraction = 1.0,        # Fraction of training data used for training (1.0 for full dataset)
+  n.minobsinnode = 10          # Minimum number of observations in terminal nodes
+)
+
+
+
+gbm_model <- gbm(STAT.230.1 ~ ., data = coursegrades[train_indices,], distribution = gbm_params$distribution,
+                 n.trees = gbm_params$n.trees, interaction.depth = gbm_params$interaction.depth,
+                 shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
+                 train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 10)
+
+# Print the summary of the trained model
+print(summary(gbm_model))
+
+# Make predictions on new data
+# Assuming 'new_data' is your new dataframe for prediction
+predictions <- predict(gbm_model, newdata = coursegrades[test_indices,], n.trees = gbm_params$n.trees)
+
+# Print the predictions
+predictions
+
+mse <- mean((predictions - coursegrades[test_indices,COI])^2)
+mse
+
+```
 
 ## Determining Error
 ### QQ-plots
@@ -261,6 +1233,8 @@ load(file="Prof_StudentGrades.RData")
 ```{r}
 
 ```
-
+# Current Line: 1250
+It starts to get into the section which uses only the students most recent grade...
+SHould i make a new section for these things?  ... probably
 
 # 
