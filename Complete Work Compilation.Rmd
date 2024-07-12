@@ -659,10 +659,33 @@ plot(studentgrades[!is.na(studentgrades$STAT.230.1),c("Student_ID","MATH.100.1",
 plot(studentgrades[!is.na(studentgrades$MATH.100.1)&!is.na(studentgrades$MATH.101.1),c("MATH.100.1","MATH.101.1")])
 ```
 
+```{r number of times courses have been taken by those who have taked STAT 230, eval=FALSE}
+# returns the number of times a course has been taken by students WHO HAVE ALL TAKEN stat 230
+ids <- unique(df_bsc_relevant_courses[df_bsc_relevant_courses$COURSE_CODE=="STAT.230",]$STUD_NO_ANONYMOUS)
+courses <- unique(df_bsc_relevant_courses[df_bsc_relevant_courses$STUD_NO_ANONYMOUS %in% ids,]$COURSE_CODE)
+new_courses <- character(0)
+for(i in 1:length(courses)){
+  if(strsplit(courses[i], split = ".", fixed = TRUE)[[1]][2] < 300){
+    new_courses <- append(new_courses, courses[i])
+  }
+}
+
+courses_taken_bsc_stat230 <- table(df_bsc_relevant_courses[df_bsc_relevant_courses$STUD_NO_ANONYMOUS %in% ids & df_bsc_relevant_courses$COURSE_CODE %in% new_courses,]$COURSE_CODE)
+
+
+sorted_courses_taken_bsc <- sort(courses_taken_bsc_stat230, decreasing = TRUE)
+sorted_courses_taken_bsc
+
+# number of courses who have been taken by at least N people: 25 people = 105 courses | 250 people = 25 courses
+N = 25
+length(sorted_courses_taken_bsc[sorted_courses_taken_bsc >= N])
+
+
+```
 
 ## First Prediction Attempts
 ### MissForest
-```{r missForest Impute into RF on course first attempts, eval=TRUE}
+```{r missForest Impute into RF on course first attempts, eval=FALSE}
 # preparing all student grades with stat230
 stat230grades <- studentgrades[!is.na(studentgrades$STAT.230.1),c("Student_ID","MATH.100.1","MATH.101.1","STAT.230.1","MATH.200.1","MATH.221.1","COSC.211.1","COSC.222.1","COSC.221.1")]
 stat230grades
@@ -778,6 +801,37 @@ qqline(residuals, col = "red")
 load(file = "studentgrades_1.RData")
 ```
 
+```{r Using missForest for prediction, eval=TRUE}
+set.seed(5934)
+# preparing all student grades with stat230
+stat230grades <- studentgrades[!is.na(studentgrades$STAT.230),-1:-5]
+stat230grades
+
+library(missForest)
+library(randomForest)
+
+n_rows <- nrow(stat230grades)
+
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+# to remove stat 230 grades from test_indicies rows
+stat230.real <- stat230grades[test_indices,]$STAT.230
+stat230grades[test_indices,]$STAT.230 <- NA
+
+stat230.imputed <- missForest(stat230grades)$ximp
+
+#stat230.rf <- randomForest(STAT.230~., data=stat230.imputed[train_indices,] )
+#stat230.pred <- predict(stat230.rf, newdata = stat230.imputed[test_indices,])
+stat230.pred <- stat230.imputed[test_indices,]$STAT.230
+
+
+# MSE value to compare to other models
+mse <- mean((stat230.pred - stat230.real)^2)
+mse
+```
+
+
 ### Random Forest
 ```{r RF on all non-NA data, eval=TRUE}
 # getting all students with grades in all courses
@@ -802,6 +856,164 @@ mse
 
 ## MSE of data without DATA101 is 175...
 ## looks like imputing data and running a randomforest is best so far
+```
+
+```{r RF on complete data, eval=TRUE}
+# this chunk uses a random forest model trained on the complete set of STAT 230, MATH 101, and COSC.221 (aka no NAs between them)
+coursegrades <- studentgrades[!is.na(studentgrades$STAT.230)&!is.na(studentgrades$MATH.101)&!is.na(studentgrades$COSC.221),c("STAT.230","MATH.101","COSC.221")]
+
+set.seed(5934)
+
+library(randomForest)
+
+n_rows <- nrow(coursegrades)
+
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+
+
+stat230.rf <- randomForest(STAT.230~., data=coursegrades[train_indices,] )
+stat230.pred <- predict(stat230.rf, newdata = coursegrades[test_indices,])
+
+
+
+# MSE value to compare to other models
+mse <- mean((stat230.pred - stat230.real)^2)
+mse
+```
+
+```{r missForest Impute into RF on few specific courses (stats maths cosc), eval=TRUE}
+# preparing all student grades with stat230
+stat230grades <- studentgrades[!is.na(studentgrades$STAT.230),c("Student_ID","MATH.100","MATH.101","STAT.230","MATH.200","MATH.221","COSC.211","COSC.222","COSC.221")]
+stat230grades
+
+library(missForest)
+library(randomForest)
+
+n_rows <- nrow(stat230grades)
+
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+
+
+stat230.imputed <- missForest(stat230grades[,2:9])$ximp
+
+stat230.rf <- randomForest(STAT.230~., data=stat230.imputed[train_indices,])
+predictions <- predict(stat230.rf, newdata = stat230.imputed[test_indices,])
+
+stat230.real <- stat230grades[test_indices,]$STAT.230
+
+# RMSE value to compare to other models
+rmse <- sqrt(mean((predictions - stat230.real)^2))
+rmse
+```
+
+```{r missForest Impute into RF on all courses taken x times, eval=TRUE}
+# returns the number of times a course has been taken by students who have also taken stat 230
+ids <- unique(df_bsc_relevant_courses[df_bsc_relevant_courses$COURSE_CODE=="STAT.230",]$STUD_NO_ANONYMOUS)
+courses <- unique(df_bsc_relevant_courses[df_bsc_relevant_courses$STUD_NO_ANONYMOUS %in% ids,]$COURSE_CODE)
+new_courses <- character(0)
+for(i in 1:length(courses)){
+  if(strsplit(courses[i], split = ".", fixed = TRUE)[[1]][2] < 300){
+    new_courses <- append(new_courses, courses[i])
+  }
+}
+
+courses_taken_bsc_stat230 <- table(df_bsc_relevant_courses[df_bsc_relevant_courses$STUD_NO_ANONYMOUS %in% ids & df_bsc_relevant_courses$COURSE_CODE %in% new_courses,]$COURSE_CODE)
+
+
+sorted_courses_taken_bsc <- sort(courses_taken_bsc_stat230, decreasing = TRUE)
+
+##
+## Filter course names used base on how many people have taken those predictor courses
+##
+course_names <- sorted_courses_taken_bsc[sorted_courses_taken_bsc >= 190]
+
+
+course_names <- dimnames(course_names)[[1]]
+
+
+coursegrades <- studentgrades[!is.na(studentgrades$STAT.230),colnames(studentgrades) %in% course_names]
+head(coursegrades)
+
+library(missForest)
+library(randomForest)
+
+set.seed(5934)
+n_rows <- nrow(coursegrades)
+
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+
+
+stat230.imputed <- missForest(coursegrades[,-1])$ximp
+
+stat230.rf <- randomForest(STAT.230~., data=stat230.imputed[train_indices,])
+predictions <- predict(stat230.rf, newdata = stat230.imputed[test_indices,])
+
+stat230.real <- coursegrades[test_indices,]$STAT.230
+
+# RMSE value to compare to other models
+rmse <- sqrt(mean((predictions - stat230.real)^2))
+rmse
+```
+
+```{r missForest Impute into RF on all courses *USED FOR TESTING ON DIFF COURSES* (COSC.221)}
+# returns the number of times a course has been taken by students who have also taken xxxx.xxx
+ids <- unique(df_bsc_relevant_courses[df_bsc_relevant_courses$COURSE_CODE=="COSC.221",]$STUD_NO_ANONYMOUS)
+courses <- unique(df_bsc_relevant_courses[df_bsc_relevant_courses$STUD_NO_ANONYMOUS %in% ids,]$COURSE_CODE)
+new_courses <- character(0)
+for(i in 1:length(courses)){
+  if(strsplit(courses[i], split = ".", fixed = TRUE)[[1]][2] < 300){
+    new_courses <- append(new_courses, courses[i])
+  }
+}
+
+courses_taken_bsc_stat230 <- table(df_bsc_relevant_courses[df_bsc_relevant_courses$STUD_NO_ANONYMOUS %in% ids & df_bsc_relevant_courses$COURSE_CODE %in% new_courses,]$COURSE_CODE)
+
+
+sorted_courses_taken_bsc <- sort(courses_taken_bsc_stat230, decreasing = TRUE)
+course_names <- sorted_courses_taken_bsc[sorted_courses_taken_bsc >= 50]
+
+
+
+set.seed(45)
+
+# of the same year and below
+# preparing all student grades with stat230
+course_names <- dimnames(course_names)[[1]]
+
+
+
+course_names <- c("COSC.121","MATH.200","MATH.221","COSC.221","COSC.211","MATH.101","COSC.222","ECON.101","COSC.111","PSYO.111","STAT.230")
+
+stat230grades <- studentgrades[!is.na(studentgrades$COSC.221),colnames(studentgrades) %in% course_names]
+stat230grades
+
+library(missForest)
+library(randomForest)
+
+n_rows <- nrow(stat230grades)
+
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+
+
+stat230.imputed <- missForest(stat230grades[,-1])$ximp
+
+stat230.rf <- randomForest(COSC.221~., data=stat230.imputed[train_indices,])
+stat230.pred <- predict(stat230.rf, newdata = stat230.imputed[test_indices,])
+
+stat230.real <- stat230grades[test_indices,]$COSC.221
+
+# MSE value to compare to other models
+rmse <- sqrt(mean((stat230.pred - stat230.real)^2))
+rmse
+
 ```
 
 ### Gradient Boosted Machines
@@ -933,12 +1145,300 @@ mse
 ```
 
 ### Matrix Factorization
+```{r Dataset creation for MF, eval=TRUE}
+# Getting list of students wanted
+studs <- studentgrades[!is.na(studentgrades$STAT.230),]$Student_ID
+
+data <- data.frame(student = character(), course=character(), grade=double())
+for(id in studs){
+  for(c in 6:205){
+    if(!is.na(studentgrades[studentgrades$Student_ID==id,c])){
+      data <- rbind(data, list(id,colnames(studentgrades)[c],studentgrades[studentgrades$Student_ID==id,c]))
+    }
+  }
+}
+
+colnames(data) <- c("student","course","grade")
+
+data <- na.omit(data)  # Remove rows with NA ratings
+
+# Split into obj course and not
+data_obj <- data[data$course=="STAT.230",]
+data_non <- data[!data$course=="STAT.230",]
+
+# Creating the testing set from obj course
+n_rows <- nrow(data_obj)
+
+train_indices <- sample(1:n_rows, 0.9 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+data <- rbind(data_obj[test_indices,], data_obj[train_indices,],data_non)
+
+
+# Factoring data
+data[] <- lapply(data, function(x) {
+  if (is.character(x)) {
+    as.numeric(factor(x))
+  } else {
+    x
+  }
+})
+
+obj_course <- data[1,2]
+```
+
+```{r Matrix Factorization prediction, eval=TRUE}
+library(recosystem)
+
+# Create a Reco object
+r <- Reco()
+
+# Define the training set
+train_set <- data_memory(user_index = data$student[-1:-length(test_indices)], item_index = data$course[-1:-length(test_indices)], rating = data$grade[-1:-length(test_indices)])
+
+# Train the model with ALS
+r$train(train_set, opts = list(dim = 10, costp_l2 = 0.2, costq_l2 = 0.2, lrate = 0.05, niter = 20))
+
+
+# Initialize the matrix to store predicted grades
+predicted_grades <- data[1:length(test_indices),]
+predicted_grades$grade <- NA
+
+# Predict missing values
+
+for(i in 1:nrow(predicted_grades)){
+  predicted_grades[i,]$grade <- r$predict(data_memory(user_index = predicted_grades[i,]$student, item_index = predicted_grades[i,]$course))
+}
+
+
+# Print the predicted grades matrix
+print(predicted_grades)
+
+
+# Calculate MSE for observed (non-NA) grades
+observed_indices <- which(!is.na(grades))
+mse <- mean((predicted_grades$grade - data_obj[test_indices,]$grade)^2)
+mse
+```
+
 ### Structured Learning
+```{r Structured Learning, eval=FALSE}
+
+library(bnlearn)
+
+suppressWarnings({
+pc <- pc.stable(studentgrades[,-(1:5)], undirected = FALSE)
+pc$arcs # 10 arcs
+
+gs <- gs(studentgrades[,-(1:5)], undirected = FALSE)
+gs$arcs # 10 arcs
+
+iamb <- iamb(studentgrades[,-(1:5)])
+iamb$arcs # 75 arc... some potential
+
+hc <- tabu(studentgrades[,-(1:5)], score = "aic")
+hc$arcs
+
+mmhc <- h2pc(studentgrades[,-(1:5)])
+mmhc$arcs
+
+mmpc <- mmpc(studentgrades[,-(1:5)])
+mmpc$arcs # lots of pairs but no substance
+})
+
+chow <- chow.liu(studentgrades[,-(1:5)])
+chow$arcs[chow$arcs[,1]=="STAT.230"]
+
+mmpc$arcs[mmpc$arcs[,1]=="STAT.230"]
+```
+
 ### Support Vector Machines
+```{r SVM model, eval=FALSE}
+library(e1071)
+library(missForest)
+
+course_names <- c("COSC.121","MATH.200","MATH.221","COSC.221","COSC.211","MATH.101","COSC.222","ECON.101","COSC.111","PSYO.111","STAT.230")
+
+grades <- studentgrades[!is.na(studentgrades$STAT.230),colnames(studentgrades) %in% course_names]
+
+#grades.imputed <- missForest(grades)$ximp
+
+
+n_rows <- nrow(grades)
+
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+xtrain <- grades[train_indices,!names(grades) %in% c("STAT.230")]
+ytrain <- grades[train_indices,"STAT.230"]
+xtest <- grades[test_indices,!names(grades) %in% c("STAT.230")]
+ytest <- grades[test_indices,"STAT.230"]
+
+
+svm_model <- svm(STAT.230~., data=grades[train_indices,])
+
+#opt_svm <- tune(svm_model, STAT.230~., data=grades[train_indices,],ranges=list(elsilon=seq(0,1,0.1), cost=1:100))
+
+pred_svm <- predict(svm_model, data=grades[test_indices[1],])
+length(pred_svm)
+pred_svm
+
+grades.real <- grades[test_indices,"STAT.230"]
+
+rmse <- sqrt(mean((pred_svm - grades.real)^2))
+rmse
+```
+
+```{r SVM via trainControl, eval=TRUE}
+library(e1071)
+library(missForest)
+library(kernlab)  # install if necessary using 'install.packages'
+library(caret) # install if necessary using 'install.packages'
+
+course_names <- c("COSC.121","MATH.200","MATH.221","COSC.221","COSC.211","MATH.101","COSC.222","ECON.101","COSC.111","PSYO.111","STAT.230")
+
+grades <- studentgrades[!is.na(studentgrades$STAT.230),colnames(studentgrades) %in% course_names]
+#grades <- studentgrades[!is.na(studentgrades$STAT.230),]
+
+grades <- missForest(grades)$ximp
+
+
+n_rows <- nrow(grades)
+
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+xtrain <- grades[train_indices,!names(grades) %in% c("STAT.230")]
+ytrain <- grades[train_indices,"STAT.230"]
+xtest <- grades[test_indices,!names(grades) %in% c("STAT.230")]
+ytest <- grades[test_indices,"STAT.230"]
+
+
+#To train the model we will use k-fold cross validation, with k set to 5
+ctrl <- trainControl(method = "cv", number=5) 
+
+
+# Create a grid of parameters to test and train the model with dimension 1
+SVRGridCoarse <- expand.grid(.sigma=c(0.001, 0.01, 0.1), .C=c(10,100,1000))
+SVRFitCoarse <- train(xtrain, ytrain, method="svmRadial", tuneGrid=SVRGridCoarse, trControl=ctrl, type="eps-svr")
+
+# Display results
+SVRFitCoarse
+
+ggplot(SVRFitCoarse)
+
+SVRFitCoarse$finalModel
+
+yPred <- predict(SVRFitCoarse$finalModel, xtest)
+```
+
 ### Recursive Feature Elimination
+```{r Trying RFE... doesnt work on NA, eval=FALSE}
+library("dplyr")
+library("faux")
+library("DataExplorer")
+library("caret")
+library("randomForest")
+
+studentgrades.factor <- studentgrades %>%
+  # Save categorical features as factors
+  mutate_at(c("Student_ID", "Major.1", "Major.2", "Minor", "Honors"), 
+            as.factor)
+
+
+# Define the control using a random forest selection function
+control <- rfeControl(functions = rfFuncs, # random forest
+                      method = "repeatedcv", # repeated cv
+                      repeats = 5, # number of repeats
+                      number = 10) # number of folds
+
+n_rows <- nrow(studentgrades.factor)
+
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+xtrain <- studentgrades.factor[train_indices,!names(studentgrades.factor) %in% c("STAT.230")]
+ytrain <- studentgrades.factor[train_indices,"STAT.230"]
+xtest <- studentgrades.factor[test_indices,!names(studentgrades.factor) %in% c("STAT.230")]
+ytest <- studentgrades.factor[test_indices,"STAT.230"]
+
+# Run RFE
+result_rfe1 <- rfe(x = xtrain, 
+                   y = ytrain, 
+                   sizes = c(1:13),
+                   rfeControl = control)
+
+# Print the results
+result_rfe1
+
+# Print the selected features
+predictors(result_rfe1)
+
+# Print the results visually
+ggplot(data = result_rfe1, metric = "Accuracy") + theme_bw()
+ggplot(data = result_rfe1, metric = "Kappa") + theme_bw()
+```
+
 ### LASSO Feature Selection
+In this section there are two incomplete chunks of code. I had moved off of working on feature selection as we deemed GBMs were doing a good job at indicating which courses are the most important.
+```{r LASSO feature selection, eval=FALSE}
+cv_5 <- trainControl(method="cv", number=5)
+studentgrades_stat230 <- studentgrades[!is.na(studentgrades$STAT.230),]
+lasso <- train(STAT.230 ~., data=studentgrades_stat230, method='lasso',  trControl=cv_5, na.action = na.exclude)
+```
+
+```{r Lasso.., eval=FALSE}
+library(glmnet)
+
+cv_model <- cv.glmnet(studentgrades$STAT.230~studentgrades[,-c(1,2,3,4,5,"STAT.230")], nfolds = 10,alpha=1)
+```
+
+### Singular Value Decomposition
+I had moved away from trying different modeling methods to focus on improving GBMs.................
+```{r SVD, eval=FALSE}
+library(svd)
+
+trlan.eigen(studentgrades[,-(1:5)])
+```
+
+
 
 ## Further work on GBM
+
+### Summary of the Boosting Process
+
+1. **Initialize the model** with a constant value, typically the mean of the target values for regression:
+
+\[ 
+F_0(x) = \arg\min_{c} \sum_{i=1}^{N} L(y_i, c)
+\]
+
+2. **For \(m = 1\) to \(M\) (number of boosting iterations)**:
+   - Compute the residuals \(r_i^m\)
+   - For squared error loss, this simplifies to:
+\[
+r_i^m = y_i - F_{m-1}(x_i)
+\]
+   - Fit a base learner \(h_m(x)\) to the residuals.
+   - Update the model via gradient decent:
+
+\[
+F_{m}(x) = F_{m-1}(x) + \nu h_m(x)
+\]
+
+3. **Final prediction** is the sum of all base learners:
+
+\[
+\hat{y} = F_M(x) = \sum_{m=1}^{M} \nu h_m(x)
+\]
+
+
+- What we are controlling and changing:
+    - Boosting iterations (\texttt{ntrees}): variable...
+    - Learning rate (\texttt{shrinkage} parameter): 0.05
+    - Loss function distribution: Gaussian
+
+
 ### Data Preperation
 ```{r GBM data prep, eval=TRUE}
 # Identifying the course of interest
@@ -1065,10 +1565,224 @@ rmse <- sqrt(mean((predictions - coursegrades[test_indices,COI])^2))
 rmse
 ```
 
-## Plots
+### Graphs
+```{r Heatmap on prediction letter grades, eval=TRUE}
+library(caret)
+library(ggplot2)
+
+# Function to assign letter grades based on numeric ranges
+assign_grades <- function(scores) {
+  # Define the breaks for the numeric ranges
+  breaks <- c(-Inf, 49, 54, 59, 63, 67, 71, 75, 79, 84, 89, 100)
+  
+  # Define the corresponding labels for each range
+  labels <- c("F", "D", "C-", "C", "C+", "B-", "B", "B+", "A-", "A", "A+")
+  
+  # Use the cut function to assign labels based on the breaks
+  grades <- cut(scores, breaks = breaks, labels = labels, right = TRUE)
+  
+  return(grades)
+}
+
+
+predictions_letter <- assign_grades(predictions)
+actual_letter <- assign_grades(actual)
+
+# displaying confusion matrix
+confusionMatrix(predictions_letter, actual_letter)
+
+
+confusion_matrix <- table(actual_letter, predictions_letter)
+confusion_matrix <- confusionMatrix(confusion_matrix)
+
+# Creating and displaying heat map
+ggplot(as.data.frame(confusion_matrix$table), aes(x = actual_letter, y = predictions_letter, fill = Freq)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient(low = "white", high = "red") +
+  labs(x = "Actual Grades", y = "Predicted Grades", fill = "Frequency") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  geom_tile(data = subset(as.data.frame(confusion_matrix$table), actual_letter == predictions_letter),
+            aes(fill = Freq), color = "black")
+```
+
+### Adding Error Bars
+```{r adding error bars... que?}
+## calculating size of error bars
+errors <- abs(predictions - actual)
+error_bars <- sd(errors)
+
+
+
+
+## plotting graph and error bars
+plot(actual, predictions, 
+     xlab = "Actual Grades", ylab = "Predicted Grades",
+     main = "Predicted vs Actual Grades with Error Bars", xlim = c(0,100), ylim = c(0,100),pch = 16)
+
+# Add error bars
+arrows(actual, predictions - error_bars, 
+       actual, predictions + error_bars, 
+       angle = 90, code = 3, length = 0.1, col = 1:length(predictions))
+
+abline(0, 1, col = "red")
+```
+
+```{r quantile gbm error bars, eval=TRUE}
+## training two more gbms using quantile ranges as the prediction interval
+
+gbm_params <- list(
+  distribution = list(name = "quantile", alpha = 0.025),  # Specify the distribution for regression
+  n.trees = 8000,               # Number of trees (iterations)
+  interaction.depth = 4,       # Maximum depth of trees
+  shrinkage = 0.001,            # Learning rate (shrinkage)
+  bag.fraction = 0.5,          # Fraction of training data used for each tree
+  train.fraction = 1.0,        # Fraction of training data used for training (1.0 for full dataset)
+  n.minobsinnode = 5          # Minimum number of observations in terminal nodes
+)
+
+# Running model first time on base params
+gbm_model <- gbm(STAT.230 ~ ., data = coursegrades[train_indices,], distribution = gbm_params$distribution,
+                 n.trees = gbm_params$n.trees, interaction.depth = gbm_params$interaction.depth,
+                 shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
+                 train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 5)
+
+LB_predictions <- predict(gbm_model, newdata = coursegrades[test_indices,], n.trees = ntrees)
+
+
+gbm_params <- list(
+  distribution = list(name = "quantile", alpha = 0.975),  # Specify the distribution for regression
+  n.trees = 8000,               # Number of trees (iterations)
+  interaction.depth = 4,       # Maximum depth of trees
+  shrinkage = 0.001,            # Learning rate (shrinkage)
+  bag.fraction = 0.5,          # Fraction of training data used for each tree
+  train.fraction = 1.0,        # Fraction of training data used for training (1.0 for full dataset)
+  n.minobsinnode = 5          # Minimum number of observations in terminal nodes
+)
+
+# Running model first time on base params
+gbm_model <- gbm(STAT.230 ~ ., data = coursegrades[train_indices,], distribution = gbm_params$distribution,
+                 n.trees = gbm_params$n.trees, interaction.depth = gbm_params$interaction.depth,
+                 shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
+                 train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 5)
+
+UB_predictions <- predict(gbm_model, newdata = coursegrades[test_indices,], n.trees = ntrees)
+
+## plotting graph and error bars
+plot(actual, predictions, 
+     xlab = "Actual Grades", ylab = "Predicted Grades",
+     main = "Predicted vs Actual Grades with Error Bars", xlim = c(00,100), ylim = c(0,100),pch = 16)
+
+# Add error bars
+arrows(actual, LB_predictions, 
+       actual, UB_predictions, 
+       angle = 90, code = 3, length = 0.1, col = 1:length(predictions))
+
+abline(0, 1, col = "red")
+```
+
+```{r bootstrap gbm error bars, eval=FALSE}
+# bootstrapping the model x times
+n_iterations = 50  # Number of bootstrapped models
+boot_preds = numeric(0)
+
+
+library(gbm)
+
+gbm_params <- list(
+  distribution = "gaussian",  # Specify the distribution for regression
+  n.trees = 6000,               # Number of trees (iterations)
+  interaction.depth = 3,       # Maximum depth of trees
+  shrinkage = 0.001,            # Learning rate (shrinkage)
+  bag.fraction = 0.5,          # Fraction of training data used for each tree
+  train.fraction = 1.0,        # Fraction of training data used for training (1.0 for full dataset)
+  n.minobsinnode = 5          # Minimum number of observations in terminal nodes
+)
+
+
+for(i in 1:n_iterations){
+  # Create a bootstrapped dataset
+  set.seed(100+i)
+  
+  n_rows <- nrow(coursegrades)
+  train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+  test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+    
+  gbm_model <- gbm(STAT.230 ~ ., data = coursegrades[train_indices,], distribution = gbm_params$distribution,
+                 n.trees = gbm_params$n.trees, interaction.depth = gbm_params$interaction.depth,
+                 shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
+                 train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 5)
+
+  
+  # Predict on test data
+  preds <- predict(gbm_model, newdata = coursegrades[test_indices,], n.trees = ntrees)
+  boot_preds <- append(boot_preds, preds)
+  
+}
+
+# Convert predictions to a NumPy array
+#predictions
+
+# Calculate the mean and standard deviation of the predictions
+mean_preds <- mean(boot_preds)
+std_preds <- sd(boot_preds)
+
+# Confidence interval on average grade of STAT 230
+lower_bound <- mean_preds - 1.96 * std_preds
+upper_bound <- mean_preds + 1.96 * std_preds
+
+
+## plotting graph and error bars made from bootstrapping predictions from many different models
+UB_predictions <- predictions + 1.96 * std_preds
+LB_predictions <- predictions - 1.96 * std_preds
+
+
+plot(actual, predictions, 
+     xlab = "Actual Grades", ylab = "Predicted Grades",
+     main = "Predicted vs Actual Grades with Error Bars", xlim = c(00,100), ylim = c(0,100),pch = 16)
+
+# Add error bars
+arrows(actual, LB_predictions, 
+       actual, UB_predictions, 
+       angle = 90, code = 3, length = 0.1, col = 1:length(predictions))
+
+abline(0, 1, col = "red")
+```
+
+### Hyperparameter Training
+```{r gridSearch on GBM, eval=FALSE}
+library(caret)
+library(tidyverse)
+
+train_control = trainControl(method = "cv", number = 5, search = "grid")
+
+gbmGrid <-  expand.grid(
+  # distribution = "gaussian",  # Specify the distribution for regression
+  n.trees = c(200,500,1000,1500,2000),               # Number of trees (iterations)
+  interaction.depth = c(3:7),       # Maximum depth of trees
+  shrinkage = c(0.025,0.01,0.005,0.0025,0.001),           # Learning rate (shrinkage)
+  # bag.fraction = 0.5,          # Fraction of training data used for each tree
+  # train.fraction = 1.0,        # Fraction of training data used for training (1.0 for full dataset)
+  n.minobsinnode = c(5,8,10,12,15)          # Minimum number of observations in terminal nodes
+)
+
+# training a Gboost Regression tree model while tuning parameters
+model = train(STAT.230~., data = coursegrades[train_indices], method = "gbm", trControl = train_control, tuneGrid = gbmGrid, na.action = na.pass)
+
+# summarising the results
+print(model)
+
+# Make predictions on new data
+# predictions <- predict(model$bestTune, newdata = coursegrades[test_indices,], n.trees = ntrees)
+# 
+# rmse <- sqrt(mean((predictions - coursegrades[test_indices,COI])^2))
+# rmse
+```
+
+## Main Plots Used
 ### Predicted grades vs Actual grades
 ```{r predicted grades vs actual grades, eval=TRUE}
-actual <- coursegrades[test_indices,]$COSC.221
+actual <- coursegrades[test_indices,]$STAT.230
 plot(actual, predictions, xlab = "Actual Grades", ylab = "Predicted Grades", 
      main = "Predicted vs Actual Grades", pch = 16, col = "blue", xlim = c(0,100), ylim = c(0,100))
 
@@ -1225,7 +1939,7 @@ mse
 
 ```
 
-## Determining Error
+## Determining Error.. may not be needed as I've got it going up above...
 ### QQ-plots
 ### Bootstrapping
 
@@ -1233,7 +1947,7 @@ mse
 ```{r}
 
 ```
-# Current Line: 1250
+# Current Line GBM: 470
 It starts to get into the section which uses only the students most recent grade...
 SHould i make a new section for these things?  ... probably
 
