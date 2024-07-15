@@ -12,7 +12,7 @@ output: html_document
 
 ## Student grades data
 
-
+The first thing we do is read in the student grades from the csv given. After that we trim the whitespace for all character columns to ensure there are no irregularities. A course code column is created to put a course with it's course number in the form COURSE.NUMBER.
 ```{r reading in student-data, eval = FALSE}
 ## this chunk is used to read in student grades data from student-data.csv
 ## and cleans the data to be used
@@ -75,6 +75,7 @@ load("student-data.RData")
 head(df_bsc)
 ```
 
+This chunks' main purpose is to make a table summing the number of times each course is taken. This also identifies the "Relevant Courses" as df_bsc_relevant_courses.
 ```{r finding number of times courses were taken, eval=FALSE}
 # Determining how many bsc students took each course
 unique(df_clean$COURSE_CODE)|>length()
@@ -83,12 +84,12 @@ courses_taken_bsc <- table(df_bsc$COURSE_CODE)
 
 # previous lines of code
 # sorted_courses_taken_bsc <- sort(courses_taken_bsc, decreasing = TRUE)[1:200]
-# sorted_courses_taken_bsc <- sort(courses_taken_bsc, decreasing = TRUE)
+sorted_courses_taken_bsc <- sort(courses_taken_bsc, decreasing = TRUE)
 # sorted_courses_taken_bsc <- sorted_courses_taken_bsc[substr(names(sorted_courses_taken_bsc),1,4) %in% c("DATA","MATH",
                                                    # "COSC","STAT")]
 
 # current line which removes any courses not taken at least 10 times
-sorted_courses_taken_bsc <- sort(courses_taken_bsc[courses_taken_bsc >= 10], decreasing = TRUE)
+# sorted_courses_taken_bsc <- sort(courses_taken_bsc[courses_taken_bsc >= 10], decreasing = TRUE)
 
 # barplot showing # of times a course is taken
 barplot(sorted_courses_taken_bsc)
@@ -101,8 +102,8 @@ df_bsc_relevant_courses <- df_bsc[df_bsc$COURSE_CODE %in% course_names, ]
 # Getting a list of all student ids which took relevant courses
 uniqueids <- unique(df_bsc_relevant_courses$STUD_NO_ANONYMOUS)
 ```
-3
 
+This chunk was used to determine the maximum number of times each course was taken. With the number of times a course was taken, we can make enough columns for each students' retaken course grade without issue.
 ```{r counting course retake occurences, eval=FALSE}
 # finding student who've taken a course more than once
 duplicate_rows <- df_bsc_relevant_courses[duplicated(df_bsc_relevant_courses[c("STUD_NO_ANONYMOUS", "COURSE_CODE")]) | duplicated(df_bsc_relevant_courses[c("STUD_NO_ANONYMOUS", "COURSE_CODE")], fromLast = TRUE), ]
@@ -118,6 +119,7 @@ max_repeats <- apply(course_counts, 2, max)
 max_course_counts_df <- data.frame(COURSE_CODE = names(max_repeats), max_repeats)
 ```
 
+Here we create those columns header names to be able to create a empty dataframe to fill.
 ```{r creating list of course column names .1 .2, eval=FALSE}
 # Creating a new list of course column names
 ## eg. Math.101.1, Math.101.2...
@@ -141,7 +143,7 @@ course_names_dups <- append(non_rep_courses, rep_courses)
 
 
 ### Extracting student majors and minors
-
+This chunk is used to find each students' major(s), minor, and whether they are taking honors. They are saved in a dataframe with each student on a new row. This dataframe is later fed into the studentgrades dataframe including all student grades. This chunk will be run for any of the three types of students grade structure used.
 ```{r finding student majors and minors, eval=FALSE}
 # Finding student majors and minors
 ### WARNING: no 2023 data yet which may contain updates to major/minors
@@ -222,8 +224,9 @@ head(student_mm)
 # Data Structure
 ## Using all student grades from retaken courses
 
-This variation of studentgrades has each student represented as rows, and courses as columns. Course grades are recorded for each attempt a student takes at each course and creates new columns for new grades. For example, MATH 101 has 3 columns: MATH.101.1, MATH.101.2, MATH.101.3. One for each new attempt at MATH 101.
+This variation of studentgrades has each student represented as rows, and courses as columns. Course grades are recorded for each attempt a student takes at each course. Each new attempt is saved in a new column with all 3rd time attemps of MATH.101 being saved in MATH.101.3. For example, MATH 101 has 3 columns: MATH.101.1, MATH.101.2, MATH.101.3. One for each new attempt at MATH 101.
 
+Here we create an empty dataframe, add in the unique student ids and their matching majors and minors. After we loop through df_bsc_relevant_courses to add in grades to their respective student and course column.
 ```{r Making studentgrades with .1 .2 etc, eval=FALSE}
 # Making the Data Frame
  ## Columns to add: Student ID, Major, Honors, Minor, Extras, 200 most common courses
@@ -405,7 +408,7 @@ load("cleaned_profs.RData")
 
 The dataframe rel_course_profs contains rows containing the Professor, Year, Course name, and Section for each course and section from 2018S to 2023S.
 
-### Professor selection process
+
 ### Data structure
 
 ```{r adding profs to studentgrades *OLD*, eval=FALSE}
@@ -567,6 +570,8 @@ load(file="Prof_StudentGrades.RData")
 ```
 
 The dataframe studentgrades_prof is similar to studentgrades (most recent grades version) in that students grades are saved as rows, and each columns is a different course. Additionally, there are columns which contain the professors who taught each course there is a grade for. For example, Student X has a grade in the MATH.101 column and will therefore have a professor in the MATH.101.P column. Student Y who has not taken MATH 101 will not have a grade in MATH.101, nor a professor in MATH.101.P.
+
+
 
 # Analysis and Prediction
 
