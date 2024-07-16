@@ -6,11 +6,9 @@ output: html_document
 ---
 
 
-
-
 # Data Cleaning and Processing
 
-## Student grades data
+## Student grades data cleaning
 
 The first thing we do is read in the student grades from the csv given. After that we trim the whitespace for all character columns to ensure there are no irregularities. A course code column is created to put a course with it's course number in the form COURSE.NUMBER.
 ```{r reading in student-data, eval = FALSE}
@@ -218,6 +216,7 @@ for(i in 1:nrow(last_rows)){
 }
 head(student_mm)
 ```
+
 
 
 
@@ -583,6 +582,7 @@ head(studentgrades_prof)
 
 
 
+
 # Analysis and Prediction
 
 Throughout my time on this project I have switched which data frame I used to train and test each model and method. The three data frames are described above but are called studentgrades_rep, studentgrades, and studentgrades_prof respectively. For some of the main methods using 'old' data frames I will use other data frames for comparison.
@@ -801,6 +801,49 @@ abline(line.lm, col = "green")
 ## qq plots
 qqnorm(residuals, main = "Normal Q-Q Plot of Residuals")
 qqline(residuals, col = "red")
+```
+
+In this chunk I wanted to try a method that worked before with the new studentgrades_prof data. As we can see it still works even when imputing professor data.
+```{r missForest Impute into RF on studentgrades_prof, eval=TRUE}
+set.seed(5934)
+# preparing all student grades with stat230
+stat230grades <- studentgrades_prof[!is.na(studentgrades_prof$STAT.230),c("MATH.100","MATH.101","STAT.230","MATH.200","MATH.221","COSC.211","COSC.222","COSC.221","MATH.100.P","MATH.101.P","STAT.230.P","MATH.200.P","MATH.221.P","COSC.211.P","COSC.222.P","COSC.221.P")]
+# stat230grades
+
+library(missForest)
+library(randomForest)
+
+n_rows <- nrow(stat230grades)
+
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+
+
+stat230.imputed <- missForest(stat230grades)$ximp
+
+stat230.rf <- randomForest(STAT.230~., data=stat230.imputed[train_indices,] )
+stat230.pred <- predict(stat230.rf, newdata = stat230.imputed[test_indices,])
+
+stat230.real <- stat230grades[test_indices,]$STAT.230
+
+# RMSE value to compare to other models
+rmse <- sqrt(mean((stat230.pred - stat230.real)^2))
+rmse
+
+# graphs
+## predicted vs actual plot
+predictions <- stat230.pred
+actual <- stat230.real
+
+
+plot(actual, predictions, xlab = "Actual Grades", ylab = "Predicted Grades", 
+     main = "Predicted vs Actual Grades", pch = 16, col = "blue", xlim = c(0,100), ylim = c(0,100))
+abline(0, 1, col = "red")
+
+line.lm <- lm(predictions~actual)
+abline(line.lm, col = "green")
+
 ```
 
 In this chunk I cut right to the chase and use the imputed values as grade predictions. As expected it doesn't work very well.
@@ -1135,6 +1178,94 @@ rmse
 ## 109 mse.. better still
 ```
 
+This chunk will use students grades of the current year (eg. second year uses STAT.230 and COSC.221) to train the GBM model. However, the test set will have grades from the current year removed (eg. won't use COSC.221 as a predictor). In hindsight this isn't a great idea when using GBMs as the decision trees used won't be configured for the subset of courses used. Also to note, this uses studentgrades_rep.
+```{r, eval=FALSE}
+## sets all courses of equal or higher level to NA before prediction, but after training the model
+set.seed(5934)
+# time to remove all future year courses from prediction
+COI <- "STAT.230.1"
+coursegrades <- studentgrades_rep[!is.na(studentgrades_rep[,COI]),-1:-5]
+
+# figuring out the year level of each course...
+YOI <- as.integer(substr(strsplit(COI, split = ".", fixed = TRUE)[[1]][2],1,1))
+
+column_names <- colnames(coursegrades)
+
+# Extract digits after the period in column names
+column_digits <- as.integer(sub("^[^.]+\\.([0-9]).*", "\\1", column_names))
+
+# Find columns with digits not matching the selected course year
+cols_to_keep <- column_names[column_digits <= YOI]
+cols_to_keep <- append(cols_to_keep, COI)
+
+# All columns in the same year or below
+coursegrades <- coursegrades[, colnames(coursegrades) %in% cols_to_keep]
+
+# extras/ to do next
+grade_counts <- colSums(!is.na(coursegrades))
+# Subset columns with less than 10 grades
+sparse_cols <- names(grade_counts[grade_counts <= 5])
+
+# Need to exclude future attempts at the course, but not past
+## eg. PSYO.380.1 shouldn't use 380.2 as a predictor, but 380.2 can use 380.1
+if(length(strsplit(COI, split = ".", fixed = TRUE)[[1]]) == 3){
+  cname <- strsplit(COI, split = ".", fixed = TRUE)[[1]][1]
+  cnum <- strsplit(COI, split = ".", fixed = TRUE)[[1]][2]
+  crep <- as.integer(strsplit(COI, split = ".", fixed = TRUE)[[1]][3])
+  # remove all future instances of course (if they exist)
+  for(i in 1:length(column_names)){
+    if(strsplit(column_names[i], split = ".", fixed = TRUE)[[1]][1] == cname & strsplit(column_names[i], split = ".", fixed = TRUE)[[1]][2] == cnum & as.integer(strsplit(column_names[i], split = ".", fixed = TRUE)[[1]][3]) > crep){
+      sparse_cols <- append(sparse_cols, column_names[i])
+    }
+  }
+}
+
+# Subset the dataframe to include only courses used to predict on
+coursegrades <- coursegrades[, -which(names(coursegrades) %in% sparse_cols)]
+
+set.seed(5934)
+n_rows <- nrow(coursegrades)
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+cols_to_na <- column_names[column_digits == YOI] #### ADD BACK COURSE OF INTEREST!!!!!!!
+cols_to_na <- cols_to_na[!cols_to_na == COI]
+coursegrades[test_indices, which(names(coursegrades) %in% cols_to_na)] <- NA
+
+library(gbm)
+
+gbm_params <- list(
+  distribution = "gaussian",  # Specify the distribution for regression
+  n.trees = 100,               # Number of trees (iterations)
+  interaction.depth = 4,       # Maximum depth of trees
+  shrinkage = 0.1,             # Learning rate (shrinkage)
+  bag.fraction = 0.5,          # Fraction of training data used for each tree
+  train.fraction = 1.0,        # Fraction of training data used for training (1.0 for full dataset)
+  n.minobsinnode = 10          # Minimum number of observations in terminal nodes
+)
+
+
+
+gbm_model <- gbm(STAT.230.1 ~ ., data = coursegrades[train_indices,], distribution = gbm_params$distribution,
+                 n.trees = gbm_params$n.trees, interaction.depth = gbm_params$interaction.depth,
+                 shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
+                 train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 10)
+
+# Print the summary of the trained model
+print(summary(gbm_model))
+
+# Make predictions on new data
+# Assuming 'new_data' is your new dataframe for prediction
+predictions <- predict(gbm_model, newdata = coursegrades[test_indices,], n.trees = gbm_params$n.trees)
+
+# Print the predictions
+predictions
+
+rmse <- sqrt(mean((predictions - coursegrades[test_indices,COI])^2))
+rmse
+
+```
+
 ### Matrix Factorization
 
 Since the studentgrades data frame is highly dimensional I wanted to see if matrix factorization would work well on this dataset. The results were decent, but no grid search was implemented to further improve this method.
@@ -1402,8 +1533,8 @@ trlan.eigen(studentgrades[,-(1:5)])
 
 
 
-## Further work on GBM
 
+## Further work on GBM
 ### Summary of the Boosting Process
 
 1. **Initialize the model** with a constant value, typically the mean of the target values for regression:
@@ -1458,6 +1589,61 @@ coursegrades$Minor <- factor(coursegrades$Minor)
 
 # removing all students who don't meet course pre reqs DATA 101, COSC 221
 coursegrades <- coursegrades[!is.na(coursegrades$MATH.101) | !is.na(coursegrades$MATH.103) | !is.na(coursegrades$MATH.142), ]
+
+# coursegrades <- coursegrades[!is.na(coursegrades$MATH.101), ]
+
+
+
+# dropping columns that are very sparse (pct % are NA)
+pct <- 0.8
+courses <- numeric(0)
+for (i in 1:ncol(coursegrades)) {
+  if(is.na(coursegrades[,i]) |> sum()  > nrow(coursegrades)*pct){
+    courses <- c(courses,i)
+  }
+}
+
+coursegrades <- coursegrades[,-courses]
+
+
+
+
+
+# Removing all course columns of higher years
+YOI <- as.integer(substr(strsplit(COI, split = ".", fixed = TRUE)[[1]][2],1,1))
+
+column_names <- colnames(coursegrades)
+
+# Extract digits after the period in column names
+column_digits <- as.integer(sub("^[^.]+\\.([0-9]).*", "\\1", column_names))
+
+# Find columns with digits not matching the selected course year
+cols_to_keep <- column_names[column_digits <= YOI]
+
+# All columns in the same year or below
+coursegrades <- coursegrades[, colnames(coursegrades) %in% cols_to_keep]
+
+# display data to be used
+head(coursegrades)
+```
+
+This chunk is for initializing STAT 230 GBM code as this was the main course I was testing on.
+```{r GBM data prep, eval=TRUE}
+# Identifying the course of interest
+COI <- "STAT.230"
+coursegrades <- studentgrades_prof[!is.na(studentgrades_prof[,COI]),-c(1,3,5)]
+
+# remove all grades < 5%
+coursegrades <- coursegrades[coursegrades$STAT.230 >= 5, ]
+
+# factoring student majors
+coursegrades$Major.1 <- factor(coursegrades$Major.1)
+# factoring student minors
+coursegrades$Minor <- factor(coursegrades$Minor)
+
+
+# removing all students who don't meet course pre reqs DATA 101, COSC 221
+coursegrades <- coursegrades[!is.na(coursegrades$DATA.101) | !is.na(coursegrades$COSC.221), ]
 
 # coursegrades <- coursegrades[!is.na(coursegrades$MATH.101), ]
 
@@ -1564,7 +1750,10 @@ print(summary(gbm_model))
 # Make predictions on new data
 predictions <- predict(gbm_model, newdata = coursegrades[test_indices,], n.trees = ntrees)
 
-rmse <- sqrt(mean((predictions - coursegrades[test_indices,COI])^2))
+# save real grades
+actual <- coursegrades[test_indices,]$COSC.221
+
+rmse <- sqrt(mean((predictions - actual)^2))
 rmse
 ```
 
@@ -1580,16 +1769,16 @@ train_control = trainControl(method = "cv", number = 5, search = "grid")
 
 gbmGrid <-  expand.grid(
   # distribution = "gaussian",  # Specify the distribution for regression
-  n.trees = c(200,500,1000,1500,2000),               # Number of trees (iterations)
-  interaction.depth = c(3:7),       # Maximum depth of trees
-  shrinkage = c(0.025,0.01,0.005,0.0025,0.001),           # Learning rate (shrinkage)
+  n.trees = c(6000),               # Number of trees (iterations)
+  interaction.depth = c(2:4),       # Maximum depth of trees
+  shrinkage = c(0.005,0.0025,0.001),           # Learning rate (shrinkage)
   # bag.fraction = 0.5,          # Fraction of training data used for each tree
   # train.fraction = 1.0,        # Fraction of training data used for training (1.0 for full dataset)
-  n.minobsinnode = c(5,8,10,12,15)          # Minimum number of observations in terminal nodes
+  n.minobsinnode = c(5,10)          # Minimum number of observations in terminal nodes
 )
 
 # training a Gboost Regression tree model while tuning parameters
-model = train(STAT.230~., data = coursegrades[train_indices], method = "gbm", trControl = train_control, tuneGrid = gbmGrid, na.action = na.pass)
+model = train(COSC.221~., data = coursegrades, method = "gbm", trControl = train_control, tuneGrid = gbmGrid, na.action = na.pass)
 
 # summarising the results
 print(model)
@@ -1624,8 +1813,10 @@ arrows(actual, predictions - error_bars,
 abline(0, 1, col = "red")
 ```
 
+This chunk follows another paper in adding quantile error bars. These are calculated using the "quantile" distribution as a parameter to the gbm. Both upper and lower bounds on the quantile range are found a plotted alongside predictions.
 ```{r quantile gbm error bars, eval=TRUE}
 ## training two more gbms using quantile ranges as the prediction interval
+library(gbm)
 
 gbm_params <- list(
   distribution = list(name = "quantile", alpha = 0.025),  # Specify the distribution for regression
@@ -1638,7 +1829,7 @@ gbm_params <- list(
 )
 
 # Running model first time on base params
-gbm_model <- gbm(STAT.230 ~ ., data = coursegrades[train_indices,], distribution = gbm_params$distribution,
+gbm_model <- gbm(COSC.221 ~ ., data = coursegrades[train_indices,], distribution = gbm_params$distribution,
                  n.trees = gbm_params$n.trees, interaction.depth = gbm_params$interaction.depth,
                  shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
                  train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 5)
@@ -1657,7 +1848,7 @@ gbm_params <- list(
 )
 
 # Running model first time on base params
-gbm_model <- gbm(STAT.230 ~ ., data = coursegrades[train_indices,], distribution = gbm_params$distribution,
+gbm_model <- gbm(COSC.221 ~ ., data = coursegrades[train_indices,], distribution = gbm_params$distribution,
                  n.trees = gbm_params$n.trees, interaction.depth = gbm_params$interaction.depth,
                  shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
                  train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 5)
@@ -1677,6 +1868,7 @@ arrows(actual, LB_predictions,
 abline(0, 1, col = "red")
 ```
 
+Our final way of calculating error bars is by bootstrapping the model 50 times and using the standard deviation to calculate the upper and lower bound for each grade predicted. 
 ```{r bootstrap gbm error bars, eval=FALSE}
 # bootstrapping the model x times
 n_iterations = 50  # Number of bootstrapped models
@@ -1747,8 +1939,8 @@ abline(0, 1, col = "red")
 
 
 ### Variable selection
-This variable selection technique was taken from a **paper** with some modifications to see if removing variables improves the model. For the first few courses removed it performed alright, with a rmse of ~9. After any more than 
-```{r GBM recursive variable selection on prof data}
+This variable selection technique was taken from a **paper** with some modifications to see if removing variables improves the model. After training the model on all predictors, the two given the least importance by the gbm algorithm are removed and the model is trained again until either 2 or 1 predictors remain. For the first few courses removed it performed alright, with a rmse of ~9.5. However, as we can see the rmse never got any better and slowly increased to 10.8. 
+```{r GBM recursive variable selection on prof data, eval=FALSE}
 
 set.seed(5934)
 n_rows <- nrow(coursegrades)
@@ -1861,7 +2053,15 @@ for(loop in 1:floor((ncol(coursegrades)-3)/2)){
 
 ```
 
+This table shows 
+```{r GBM rvs, eval=TRUE}
+model_perf
+```
+
+
+
 ## Extreme Gradient Boosting
+Both Gradient Boosting Machines and Extreme Gradient Boosting follow the sample principle of gradient boosting. However, xgboost was designed to use a more regularized model formalization to control over-fitting. While this gives it better performance, I had more luck coding GBMS. For xgboost the hyperparameter training had to be set up very differently and with new parameters such as lambda and alpha training took considerably longer. Additionally, GBMs were found to be easier to set up each time allowing for the course we predict on to be changed easily.
 ```{r extreme gradient boosting, eval=FALSE}
 library(xgboost)
 
@@ -1892,6 +2092,7 @@ rmse <- sqrt(mean((predictions - coursegrades[test_indices,COI])^2))
 rmse
 ```
 
+This is the hyperparameter gridsearch for the xgboost algorithm. This is the chunk that showed that a subsample and colsample_bytree of 0.5 were best (bag.fraction and train.fraction from gbm hyperparameters).
 ```{r gridSearch on xGBM, eval=FALSE}
 library(caret)
 library(tidyverse)
@@ -1941,6 +2142,7 @@ colnames(xgb_hyperparams) <- c("rmse", "trmse", "subsample", "colsample_bytree",
 xgb_hyperparams[order(xgb_hyperparams$rmse),]
 ```
 
+The only error bars which could be implemented are the bootstrapped model since xgboost doesn't support establishing the distribution of the boosting process like gbm.
 ```{r adding bootstrapped xGBM error bars, eval=FALSE}
 # bootstrapping the model x times 
 
@@ -1996,10 +2198,12 @@ abline(0, 1, col = "red")
 ```
 
 
+
 ## Main Plots Used
 ### Predicted grades vs Actual grades
+The main plot we used to show progress was plotting the predicted student grades against their actual grades. This graph immediately shows us if we're over or under predicting due to the red line. This line indicates "perfect prediction" as it follows where predicted grades = actual grades.
 ```{r predicted grades vs actual grades, eval=TRUE}
-actual <- coursegrades[test_indices,]$STAT.230
+actual <- coursegrades[test_indices,]$COSC.221
 plot(actual, predictions, xlab = "Actual Grades", ylab = "Predicted Grades", 
      main = "Predicted vs Actual Grades", pch = 16, col = "blue", xlim = c(0,100), ylim = c(0,100))
 
@@ -2012,6 +2216,7 @@ abline(line.lm, col = "green")
 ```
 
 ### Residuals
+This was added in for model checking to make sure there are no trend in residuals.
 ```{r residuals, eval=TRUE}
 residuals <- actual - predictions
 plot(predictions, residuals, xlab = "Predicted Grades", ylab = "Residuals", 
@@ -2023,12 +2228,15 @@ abline(line.lm, col = "green")
 ```
 
 ### Q-Q Plots
+A q-q plot was also added in for model checking.
 ```{r qq plots, eval=TRUE}
 qqnorm(residuals, main = "Normal Q-Q Plot of Residuals")
 qqline(residuals, col = "red")
 ```
 
 ### Heatmap
+The heatmaps were added to view the data more categorically.
+This first chunk splits predictions and actual grades into intervals of 5 (eg. 50-54, 55-59...) and produces a heatmap of predicted vs actual grades.
 ```{r conf matrix and heat map, eval=TRUE}
 library(ggplot2)
 library(caret)
@@ -2067,6 +2275,7 @@ ggplot(as.data.frame(confusion_matrix$table), aes(x = actual_fac, y = pred_fac, 
             aes(fill = Freq), color = "black")
 ```
 
+The second chunk splits predictions and actual grades into their letter grades and produces a heatmap of predicted vs actual grades using those splits.
 ```{r Heatmap on prediction letter grades, eval=TRUE}
 library(caret)
 library(ggplot2)
@@ -2107,103 +2316,4 @@ ggplot(as.data.frame(confusion_matrix$table), aes(x = actual_letter, y = predict
             aes(fill = Freq), color = "black")
 ```
 
-## Data Variations on GBM
-This chunk will use students grades of the current year (eg. second year uses STAT.230 and COSC.221) to train the GBM model. However, the test set will have grades from the current year removed (eg. won't use COSC.221 as a predictor). In hindsight this isn't a great idea when using GBMs as the decision trees used won't be configured for the subset of courses used.
-```{r, eval=FALSE}
-## sets all courses of equal or higher level to NA before prediction, but after training the model
-set.seed(5934)
-# time to remove all future year courses from prediction
-COI <- "STAT.230.1"
-coursegrades <- studentgrades_rep[!is.na(studentgrades_rep[,COI]),-1:-5]
 
-# figuring out the year level of each course...
-YOI <- as.integer(substr(strsplit(COI, split = ".", fixed = TRUE)[[1]][2],1,1))
-
-column_names <- colnames(coursegrades)
-
-# Extract digits after the period in column names
-column_digits <- as.integer(sub("^[^.]+\\.([0-9]).*", "\\1", column_names))
-
-# Find columns with digits not matching the selected course year
-cols_to_keep <- column_names[column_digits <= YOI]
-cols_to_keep <- append(cols_to_keep, COI)
-
-# All columns in the same year or below
-coursegrades <- coursegrades[, colnames(coursegrades) %in% cols_to_keep]
-
-# extras/ to do next
-grade_counts <- colSums(!is.na(coursegrades))
-# Subset columns with less than 10 grades
-sparse_cols <- names(grade_counts[grade_counts <= 5])
-
-# Need to exclude future attempts at the course, but not past
-## eg. PSYO.380.1 shouldn't use 380.2 as a predictor, but 380.2 can use 380.1
-if(length(strsplit(COI, split = ".", fixed = TRUE)[[1]]) == 3){
-  cname <- strsplit(COI, split = ".", fixed = TRUE)[[1]][1]
-  cnum <- strsplit(COI, split = ".", fixed = TRUE)[[1]][2]
-  crep <- as.integer(strsplit(COI, split = ".", fixed = TRUE)[[1]][3])
-  # remove all future instances of course (if they exist)
-  for(i in 1:length(column_names)){
-    if(strsplit(column_names[i], split = ".", fixed = TRUE)[[1]][1] == cname & strsplit(column_names[i], split = ".", fixed = TRUE)[[1]][2] == cnum & as.integer(strsplit(column_names[i], split = ".", fixed = TRUE)[[1]][3]) > crep){
-      sparse_cols <- append(sparse_cols, column_names[i])
-    }
-  }
-}
-
-# Subset the dataframe to include only courses used to predict on
-coursegrades <- coursegrades[, -which(names(coursegrades) %in% sparse_cols)]
-
-set.seed(5934)
-n_rows <- nrow(coursegrades)
-train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
-test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
-
-cols_to_na <- column_names[column_digits == YOI] #### ADD BACK COURSE OF INTEREST!!!!!!!
-cols_to_na <- cols_to_na[!cols_to_na == COI]
-coursegrades[test_indices, which(names(coursegrades) %in% cols_to_na)] <- NA
-
-library(gbm)
-
-gbm_params <- list(
-  distribution = "gaussian",  # Specify the distribution for regression
-  n.trees = 100,               # Number of trees (iterations)
-  interaction.depth = 4,       # Maximum depth of trees
-  shrinkage = 0.1,             # Learning rate (shrinkage)
-  bag.fraction = 0.5,          # Fraction of training data used for each tree
-  train.fraction = 1.0,        # Fraction of training data used for training (1.0 for full dataset)
-  n.minobsinnode = 10          # Minimum number of observations in terminal nodes
-)
-
-
-
-gbm_model <- gbm(STAT.230.1 ~ ., data = coursegrades[train_indices,], distribution = gbm_params$distribution,
-                 n.trees = gbm_params$n.trees, interaction.depth = gbm_params$interaction.depth,
-                 shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
-                 train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 10)
-
-# Print the summary of the trained model
-print(summary(gbm_model))
-
-# Make predictions on new data
-# Assuming 'new_data' is your new dataframe for prediction
-predictions <- predict(gbm_model, newdata = coursegrades[test_indices,], n.trees = gbm_params$n.trees)
-
-# Print the predictions
-predictions
-
-mse <- mean((predictions - coursegrades[test_indices,COI])^2)
-mse
-
-```
-
-
-
-
-```{r}
-
-```
-# Current Line GBM: 470
-It starts to get into the section which uses only the students most recent grade...
-SHould i make a new section for these things?  ... probably
-
-# 
