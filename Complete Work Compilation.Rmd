@@ -405,7 +405,7 @@ for(r in 1:nrow(rel_course_profs)){
 save(rel_course_profs, file = "cleaned_profs.RData")
 ```
 
-```{r loading professor cleaning and final data}
+```{r loading professor cleaning and final data, eval=TRUE}
 # course_profs
 load("course_profs.RData")
 # rel_course_profs
@@ -573,7 +573,7 @@ for(i in (prof_column_adjust+6):ncol(studentgrades_prof)){
 save(studentgrades_prof, file="Prof_StudentGrades.RData")
 ```
 
-```{r loading studentgrades_prof}
+```{r loading studentgrades_prof, eval=TRUE}
 load(file="Prof_StudentGrades.RData")
 head(studentgrades_prof)
 ```
@@ -988,7 +988,7 @@ rmse
 ```
 
 This is a repeat of the last chunk with modifications which make it easier to use different courses as the course we predict for.
-```{r missForest Impute into RF on all courses *USED FOR TESTING ON DIFF COURSES* (COSC.221)}
+```{r missForest Impute into RF on all courses *USED FOR TESTING ON DIFF COURSES* (COSC.221), eval=FALSE}
 # returns the number of times a course has been taken by students who have also taken xxxx.xxx
 ids <- unique(df_bsc_relevant_courses[df_bsc_relevant_courses$COURSE_CODE=="COSC.221",]$STUD_NO_ANONYMOUS)
 courses <- unique(df_bsc_relevant_courses[df_bsc_relevant_courses$STUD_NO_ANONYMOUS %in% ids,]$COURSE_CODE)
@@ -1628,7 +1628,7 @@ head(coursegrades)
 ```
 
 This chunk is for initializing STAT 230 GBM code as this was the main course I was testing on.
-```{r GBM data prep, eval=TRUE}
+```{r GBM data prep STAT230, eval=TRUE}
 # Identifying the course of interest
 COI <- "STAT.230"
 coursegrades <- studentgrades_prof[!is.na(studentgrades_prof[,COI]),-c(1,3,5)]

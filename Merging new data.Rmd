@@ -1,0 +1,96 @@
+---
+title: "New Data"
+output: html_document
+date: "2024-07-17"
+---
+
+```{r}
+new_data <- read.csv("..\\UBCO-Grade-Prediction-data\\Data Science UBCO Details FINAL.csv")
+old_data <- read.csv("..\\UBCO-Grade-Prediction-data\\student-data.csv")
+
+new_ids <- unique(new_data$STUD_NO_ANONYMOUS)
+old_ids <- unique(old_data$STUD_NO_ANONYMOUS)
+sum(!unique(new_data$STUD_NO_ANONYMOUS) %in% unique(old_data$STUD_NO_ANONYMOUS))
+
+
+ids_temp <- new_ids[!(new_ids %in% old_ids)]
+
+new_data[new_data$STUD_NO_ANONYMOUS == ids_temp,]
+
+
+new_data[new_data$STUD_NO_ANONYMOUS == "0C627885100B0CD859FEF0DC52351B28",]
+old_data[old_data$STUD_NO_ANONYMOUS == "DB5DE8C55E607C000A99518F0BE9673A",]
+```
+
+
+
+```{r}
+dim(new_data)
+
+colnames(new_data)
+
+colnames(old_data)
+
+# showing all column names in old data but not in new data
+colnames(old_data)[!colnames(old_data) %in% colnames(new_data)]
+# showing all column names in new data but not in old data
+colnames(new_data)[!colnames(new_data) %in% colnames(old_data)]
+
+# finding number of courses student x took
+length(new_data[new_data$STUD_NO_ANONYMOUS == new_data$STUD_NO_ANONYMOUS[1],])
+
+# finding out which courses match in both datasets
+new_data$HDR_CRS_PCT_GRD <- as.double(new_data$HDR_CRS_PCT_GRD)
+new_data_striped <- new_data[,c("STUD_NO_ANONYMOUS","SEC_SES_YR","SEC_SES_CD","CRS_DPT_CD","CRS_NO","HDR_CRS_PCT_GRD")]
+old_data_striped <- old_data[,c("STUD_NO_ANONYMOUS","SEC_SES_YR","SEC_SES_CD","CRS_DPT_CD","CRS_NO","HDR_CRS_PCT_GRD")]
+
+actually_new_data <- !(new_data_striped %in% old_data_striped)
+
+
+
+library(generics)
+setdiff(new_data_striped, old_data_striped)
+
+```
+
+
+
+```{r}
+# pulling base data for both
+new_data <- read.csv("..\\UBCO-Grade-Prediction-data\\Data Science UBCO Details FINAL.csv")
+old_data <- read.csv("..\\UBCO-Grade-Prediction-data\\student-data.csv")
+
+# altering old df structure
+rows <- nrow(old_data)
+new_cols <- data.frame(GENDER = character(rows), CITIZENSHIP = character(rows), RESIDENCY = character(rows), CRS_DTL_CD = character(rows))
+old_data <- cbind(old_data, new_cols)
+old_data <- subset(old_data, select = -c(HDR_CRS_LTTR_GRD))
+head(old_data)
+
+## finding *new* rows to add to old dataframe
+
+# altering new dataframe so it matches old one
+new_data$HDR_CRS_PCT_GRD <- as.double(new_data$HDR_CRS_PCT_GRD)
+colnames(new_data)[5:6] <- c("DEGR_PGM_CD","CURR_YEAR_LEVEL")
+head(new_data)
+
+# finding out which courses match in both datasets
+new_data_striped <- new_data[,c("STUD_NO_ANONYMOUS","SEC_SES_YR","SEC_SES_CD","CRS_DPT_CD","CRS_NO","HDR_CRS_PCT_GRD")]
+old_data_striped <- old_data[,c("STUD_NO_ANONYMOUS","SEC_SES_YR","SEC_SES_CD","CRS_DPT_CD","CRS_NO","HDR_CRS_PCT_GRD")]
+
+
+library(dplyr)
+diff_rows <- anti_join(new_data_striped, old_data_striped)
+indices <- match(do.call(paste, diff_rows[,c("STUD_NO_ANONYMOUS","SEC_SES_YR","SEC_SES_CD","CRS_DPT_CD","CRS_NO","HDR_CRS_PCT_GRD")]), do.call(paste, new_data[,c("STUD_NO_ANONYMOUS","SEC_SES_YR","SEC_SES_CD","CRS_DPT_CD","CRS_NO","HDR_CRS_PCT_GRD")]))
+data_to_add <- new_data[indices,]
+
+# adding in new rows to old df if they are new
+final_data <- rbind(old_data, data_to_add)
+head(final_data)
+nrow(final_data)
+```
+
+```{r}
+save(final_data, file="new_merged_data.RData")
+```
+
