@@ -14,14 +14,19 @@ The first thing we do is read in the student grades from the csv given. After th
 ```{r reading in student-data, eval = FALSE}
 ## this chunk is used to read in student grades data from student-data.csv
 ## and cleans the data to be used
-df <- read.csv("..\\UBCO-Grade-Prediction-data\\student-data.csv")
+# df <- read.csv("..\\UBCO-Grade-Prediction-data\\student-data.csv")
 
-df_clean <- df[,c(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18)]
+# df_clean <- df[,c(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18)]
+
+# loading new data
+load(file="new_merged_data.RData")
+
+df_clean <- final_data
 
 # Do some cleaning on chr columns
 df_clean$STUD_NO_ANONYMOUS <- trimws(df_clean$STUD_NO_ANONYMOUS)
 df_clean$CRS_DPT_CD <- trimws(df_clean$CRS_DPT_CD)
-df_clean$HDR_CRS_LTTR_GRD <- trimws(df_clean$HDR_CRS_LTTR_GRD)
+# df_clean$HDR_CRS_LTTR_GRD <- trimws(df_clean$HDR_CRS_LTTR_GRD)  not in the new data
 df_clean$CURR_SPEC_PRIM_PGM_TYPE_1 <- trimws(df_clean$CURR_SPEC_PRIM_PGM_TYPE_1)
 df_clean$CURR_SPEC_PRIM_SUBJECT_1 <- trimws(df_clean$CURR_SPEC_PRIM_SUBJECT_1)
 df_clean$CURR_SPEC_PRIM_PGM_TYPE_2 <- trimws(df_clean$CURR_SPEC_PRIM_PGM_TYPE_2)
@@ -34,17 +39,31 @@ df_clean$DEGR_PGM_CD <- trimws(df_clean$DEGR_PGM_CD)
 df_clean$SEC_SES_YR <- trimws(df_clean$SEC_SES_YR)
 df_clean$SEC_NO <- trimws(df_clean$SEC_NO)
 df_clean$SEC_SES_CD <- trimws(df_clean$SEC_SES_CD)
-
+df_clean$GENDER <- trimws(df_clean$GENDER)
+df_clean$CITIZENSHIP <- trimws(df_clean$CITIZENSHIP)
+df_clean$RESIDENCY <- trimws(df_clean$RESIDENCY)
+df_clean$CRS_DTL_CD <- trimws(df_clean$CRS_DTL_CD)
 
 # Factor grades column
-grades <-
-  c("A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D", "F")
-df_clean$HDR_CRS_LTTR_GRD <-
-  factor(df_clean$HDR_CRS_LTTR_GRD, levels = grades)
+# grades <-
+#   c("A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D", "F")
+# df_clean$HDR_CRS_LTTR_GRD <-
+#   factor(df_clean$HDR_CRS_LTTR_GRD, levels = grades)
 
 # Create course code column
-df_clean$COURSE_CODE <- paste(df_clean$CRS_DPT_CD, df_clean$CRS_NO, sep = ".")
+df_clean$COURSE_CODE <- paste0(paste(df_clean$CRS_DPT_CD, df_clean$CRS_NO, sep = "."), df_clean$CRS_DTL_CD)
 df_clean <- df_clean[,-(12:13)]
+df_clean <- df_clean[, -(20)]
+
+# Changing course detail, gender, res, and citizenship from "" to NA
+library(dplyr)
+df_clean <- df_clean %>%
+  mutate(RESIDENCY = na_if(RESIDENCY, ""))
+df_clean <- df_clean %>%
+  mutate(CITIZENSHIP = na_if(CITIZENSHIP, ""))
+df_clean <- df_clean %>%
+  mutate(GENDER = na_if(GENDER, ""))
+
 
 # Removing all withdrawl grades
 df_clean <- df_clean[df_clean$HDR_CRS_PCT_GRD < 999,]
@@ -54,7 +73,7 @@ df_clean <- df_clean[df_clean$HDR_CRS_PCT_GRD < 999,]
 
 # Create year code column
 df_clean$YEAR_CODE <- paste0(df_clean$SEC_SES_YR, df_clean$SEC_SES_CD)
-df_clean <- df_clean[,-(15:16)]
+df_clean <- df_clean[,-(14:15)]
 
 # Removing 2023 grades (not included) [also does nothing bc ^ cleans it out]
 #df_clean <- subset(df_clean, SEC_SES_YR < 2022.5)
@@ -64,13 +83,17 @@ df_clean <- df_clean[,-(15:16)]
 #df_bsc <- df_clean[df_clean$DEGR_PGM_CD=="BSC-O",]
 
 
-df_bsc
+head(df_clean)
+
+
+
+# save(df_clean, file = "student-data.RData")
 ```
 
 The student grades data has not fundamentally changed. 
 ```{r loading cleaned student-data, eval=TRUE}
 load("student-data.RData")
-head(df_bsc)
+head(df_clean)
 ```
 
 This chunks' main purpose is to make a table summing the number of times each course is taken. This also identifies the "Relevant Courses" as df_bsc_relevant_courses.
@@ -78,7 +101,7 @@ This chunks' main purpose is to make a table summing the number of times each co
 # Determining how many bsc students took each course
 unique(df_clean$COURSE_CODE)|>length()
 # making a table indicating the number of times each course was taken
-courses_taken_bsc <- table(df_bsc$COURSE_CODE)
+courses_taken_bsc <- table(df_clean$COURSE_CODE)
 
 # previous lines of code
 # sorted_courses_taken_bsc <- sort(courses_taken_bsc, decreasing = TRUE)[1:200]
@@ -90,12 +113,12 @@ sorted_courses_taken_bsc <- sort(courses_taken_bsc, decreasing = TRUE)
 # sorted_courses_taken_bsc <- sort(courses_taken_bsc[courses_taken_bsc >= 10], decreasing = TRUE)
 
 # barplot showing # of times a course is taken
-barplot(sorted_courses_taken_bsc)
+# barplot(sorted_courses_taken_bsc)
 # saving the course names of those which remain
 course_names <- dimnames(sorted_courses_taken_bsc)[[1]]
 
 # Subsetting on only courses which are taken 10 or more times ("relevant courses")
-df_bsc_relevant_courses <- df_bsc[df_bsc$COURSE_CODE %in% course_names, ]
+df_bsc_relevant_courses <- df_clean[df_clean$COURSE_CODE %in% course_names, ]
 
 # Getting a list of all student ids which took relevant courses
 uniqueids <- unique(df_bsc_relevant_courses$STUD_NO_ANONYMOUS)
@@ -151,6 +174,9 @@ This chunk is used to find each students' major(s), minor, and whether they are 
 library(dplyr)
 
 # Assuming your dataframe is called 'df'
+
+# Order all rows in df by student year
+last_rows <- df_bsc_relevant_courses[order(df_bsc_relevant_courses$CURR_YEAR_LEVEL), ]
 
 # Group by student_id and get the last row of each group
 last_rows <- df_bsc_relevant_courses %>%
@@ -217,6 +243,28 @@ for(i in 1:nrow(last_rows)){
 head(student_mm)
 ```
 
+### Extracting gender, citizenship, and residency
+```{r}
+# Loading packages
+library(dplyr)
+
+
+# getting only rows with values for the gender, etc. columns
+rel_rows <- df_bsc_relevant_courses[!is.na(df_bsc_relevant_courses$GENDER) & !is.na(df_bsc_relevant_courses$RESIDENCY) & !is.na(df_bsc_relevant_courses$CITIZENSHIP),]
+
+
+# Group by student_id and get any row each group (since we assume gender, citizenship, nor residency changes)
+last_rows <- rel_rows %>%
+  group_by(STUD_NO_ANONYMOUS) %>%
+  slice(n())
+
+# Students' gender, citizenship, and residency
+student_gcr <- last_rows[,c(1,15,16,17)]
+colnames(student_gcr) <- c("StudentID", "Gender", "Citizenship", "Residency")
+
+# Join onto student_mm
+student_details <- left_join(student_mm, student_gcr, by = "StudentID")
+```
 
 
 
@@ -285,7 +333,7 @@ new_columns <- data.frame(matrix(NA, nrow = nrow(studentgrades), ncol = length(c
 colnames(new_columns) <- course_names
 
 # Add course name columns to existing data frame
-studentgrades <- cbind(studentgrades, student_mm[,-1], new_columns)
+studentgrades <- cbind(studentgrades, student_details[,-1], new_columns)
 
 
 # Saving student grades into df
@@ -300,6 +348,11 @@ for (i in 1:nrow(df_bsc_relevant_courses)){
 
 studentgrades
 ```
+
+```{r}
+save(studentgrades, file="StudentGrades.RData")
+```
+
 
 ```{r loading studentgrades using most recent grade, eval=TRUE}
 load("StudentGrades.RData")
@@ -509,7 +562,7 @@ new_columns <- data.frame(matrix(NA, nrow = nrow(studentgrades_prof), ncol = len
 colnames(new_columns) <- courseprof_cols
 
 # Add course name columns to existing data frame
-studentgrades_prof <- cbind(studentgrades_prof, student_mm[,-1], new_columns)
+studentgrades_prof <- cbind(studentgrades_prof, student_details[,-1], new_columns)
 
 
 prof_column_adjust <- length(course_names)
@@ -1581,16 +1634,17 @@ coursegrades <- studentgrades_prof[!is.na(studentgrades_prof[,COI]),-c(1,3,5)]
 coursegrades <- coursegrades[coursegrades$COSC.221 >= 40, ]
 # coursegrades <- coursegrades[coursegrades$COSC.221 <= 80, ]
 
-# factoring student majors
+# factoring columns
 coursegrades$Major.1 <- factor(coursegrades$Major.1)
-# factoring student minors
 coursegrades$Minor <- factor(coursegrades$Minor)
-
+coursegrades$Gender <- factor(coursegrades$Gender)
+coursegrades$Citizenship <- factor(coursegrades$Citizenship)
+coursegrades$Residency <- factor(coursegrades$Residency)
 
 # removing all students who don't meet course pre reqs DATA 101, COSC 221
 coursegrades <- coursegrades[!is.na(coursegrades$MATH.101) | !is.na(coursegrades$MATH.103) | !is.na(coursegrades$MATH.142), ]
 
-# coursegrades <- coursegrades[!is.na(coursegrades$MATH.101), ]
+
 
 
 
@@ -1604,7 +1658,7 @@ for (i in 1:ncol(coursegrades)) {
 }
 
 coursegrades <- coursegrades[,-courses]
-
+student_columns <- colnames(coursegrades)[1:5]
 
 
 
@@ -1618,7 +1672,7 @@ column_names <- colnames(coursegrades)
 column_digits <- as.integer(sub("^[^.]+\\.([0-9]).*", "\\1", column_names))
 
 # Find columns with digits not matching the selected course year
-cols_to_keep <- column_names[column_digits <= YOI]
+cols_to_keep <- c(student_columns, column_names[column_digits <= YOI])
 
 # All columns in the same year or below
 coursegrades <- coursegrades[, colnames(coursegrades) %in% cols_to_keep]
@@ -1636,17 +1690,18 @@ coursegrades <- studentgrades_prof[!is.na(studentgrades_prof[,COI]),-c(1,3,5)]
 # remove all grades < 5%
 coursegrades <- coursegrades[coursegrades$STAT.230 >= 5, ]
 
-# factoring student majors
+# factoring columns
 coursegrades$Major.1 <- factor(coursegrades$Major.1)
-# factoring student minors
 coursegrades$Minor <- factor(coursegrades$Minor)
+coursegrades$Gender <- factor(coursegrades$Gender)
+coursegrades$Citizenship <- factor(coursegrades$Citizenship)
+coursegrades$Residency <- factor(coursegrades$Residency)
 
 
 # removing all students who don't meet course pre reqs DATA 101, COSC 221
 coursegrades <- coursegrades[!is.na(coursegrades$DATA.101) | !is.na(coursegrades$COSC.221), ]
 
 # coursegrades <- coursegrades[!is.na(coursegrades$MATH.101), ]
-
 
 
 # dropping columns that are very sparse (pct % are NA)
@@ -1659,21 +1714,19 @@ for (i in 1:ncol(coursegrades)) {
 }
 
 coursegrades <- coursegrades[,-courses]
-
-
-
+student_columns <- colnames(coursegrades)[1:5]
 
 
 # Removing all course columns of higher years
 YOI <- as.integer(substr(strsplit(COI, split = ".", fixed = TRUE)[[1]][2],1,1))
 
-column_names <- colnames(coursegrades)
+column_names <- colnames(coursegrades)[6:length(colnames(coursegrades))]
 
 # Extract digits after the period in column names
 column_digits <- as.integer(sub("^[^.]+\\.([0-9]).*", "\\1", column_names))
 
 # Find columns with digits not matching the selected course year
-cols_to_keep <- column_names[column_digits <= YOI]
+cols_to_keep <- c(student_columns, column_names[column_digits <= YOI])
 
 # All columns in the same year or below
 coursegrades <- coursegrades[, colnames(coursegrades) %in% cols_to_keep]
@@ -1728,7 +1781,7 @@ gbm_params <- list(
 )
 
 # Running model first time on base params
-gbm_model <- gbm(COSC.221 ~ ., data = coursegrades, distribution = gbm_params$distribution,
+gbm_model <- gbm(STAT.230 ~ ., data = coursegrades, distribution = gbm_params$distribution,
                  n.trees = gbm_params$n.trees, interaction.depth = gbm_params$interaction.depth,
                  shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
                  train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 5)
@@ -1739,7 +1792,7 @@ ntrees <- gbm.perf(gbm_model,method="cv")[1]
 
 
 # Running model a second time with optimal # of trees
-gbm_model <- gbm(COSC.221 ~ ., data = coursegrades[train_indices,], distribution = gbm_params$distribution,
+gbm_model <- gbm(STAT.230 ~ ., data = coursegrades[train_indices,], distribution = gbm_params$distribution,
                  n.trees = ntrees, interaction.depth = gbm_params$interaction.depth,
                  shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
                  train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 5)
@@ -1751,7 +1804,7 @@ print(summary(gbm_model))
 predictions <- predict(gbm_model, newdata = coursegrades[test_indices,], n.trees = ntrees)
 
 # save real grades
-actual <- coursegrades[test_indices,]$COSC.221
+actual <- coursegrades[test_indices,]$STAT.230
 
 rmse <- sqrt(mean((predictions - actual)^2))
 rmse
@@ -2203,7 +2256,7 @@ abline(0, 1, col = "red")
 ### Predicted grades vs Actual grades
 The main plot we used to show progress was plotting the predicted student grades against their actual grades. This graph immediately shows us if we're over or under predicting due to the red line. This line indicates "perfect prediction" as it follows where predicted grades = actual grades.
 ```{r predicted grades vs actual grades, eval=TRUE}
-actual <- coursegrades[test_indices,]$COSC.221
+actual <- coursegrades[test_indices,]$STAT.230
 plot(actual, predictions, xlab = "Actual Grades", ylab = "Predicted Grades", 
      main = "Predicted vs Actual Grades", pch = 16, col = "blue", xlim = c(0,100), ylim = c(0,100))
 

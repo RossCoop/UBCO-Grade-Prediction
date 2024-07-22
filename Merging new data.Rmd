@@ -74,23 +74,26 @@ new_data$HDR_CRS_PCT_GRD <- as.double(new_data$HDR_CRS_PCT_GRD)
 colnames(new_data)[5:6] <- c("DEGR_PGM_CD","CURR_YEAR_LEVEL")
 head(new_data)
 
-# finding out which courses match in both datasets
-new_data_striped <- new_data[,c("STUD_NO_ANONYMOUS","SEC_SES_YR","SEC_SES_CD","CRS_DPT_CD","CRS_NO","HDR_CRS_PCT_GRD")]
-old_data_striped <- old_data[,c("STUD_NO_ANONYMOUS","SEC_SES_YR","SEC_SES_CD","CRS_DPT_CD","CRS_NO","HDR_CRS_PCT_GRD")]
 
 
 library(dplyr)
-diff_rows <- anti_join(new_data_striped, old_data_striped)
-indices <- match(do.call(paste, diff_rows[,c("STUD_NO_ANONYMOUS","SEC_SES_YR","SEC_SES_CD","CRS_DPT_CD","CRS_NO","HDR_CRS_PCT_GRD")]), do.call(paste, new_data[,c("STUD_NO_ANONYMOUS","SEC_SES_YR","SEC_SES_CD","CRS_DPT_CD","CRS_NO","HDR_CRS_PCT_GRD")]))
-data_to_add <- new_data[indices,]
+df_unique <- anti_join(old_data, new_data, by = c("STUD_NO_ANONYMOUS","SEC_SES_YR","SEC_SES_CD","CRS_DPT_CD","CRS_NO","HDR_CRS_PCT_GRD"))
+
 
 # adding in new rows to old df if they are new
-final_data <- rbind(old_data, data_to_add)
+final_data <- rbind(df_unique, new_data)
 head(final_data)
 nrow(final_data)
 ```
 
 ```{r}
 save(final_data, file="new_merged_data.RData")
+```
+
+
+
+```{r}
+unique(final_data$CRS_DTL_CD)
+final_data[final_data$CRS_DTL_CD != "",]
 ```
 
