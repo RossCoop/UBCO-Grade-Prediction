@@ -23,7 +23,7 @@ load(file="new_merged_data.RData")
 
 df_clean <- final_data
 
-# Do some cleaning on chr columns
+# Trim whitespace for all character columns
 df_clean$STUD_NO_ANONYMOUS <- trimws(df_clean$STUD_NO_ANONYMOUS)
 df_clean$CRS_DPT_CD <- trimws(df_clean$CRS_DPT_CD)
 # df_clean$HDR_CRS_LTTR_GRD <- trimws(df_clean$HDR_CRS_LTTR_GRD)  not in the new data
@@ -96,10 +96,11 @@ load("student-data.RData")
 head(df_clean)
 ```
 
-This chunks' main purpose is to make a table summing the number of times each course is taken. This also identifies the "Relevant Courses" as df_bsc_relevant_courses.
-```{r finding number of times courses were taken, eval=FALSE}
-# Determining how many bsc students took each course
+This chunks' main purpose is to make a table summing the number of times each course is taken. This also identifies the "Relevant Courses" as df_bsc_relevant_courses. Outputs the number of unique courses found after cleaning the data.
+```{r finding number of times courses were taken, eval=TRUE}
+# Determining how many courses there are (taken by at least 1 student)
 unique(df_clean$COURSE_CODE)|>length()
+
 # making a table indicating the number of times each course was taken
 courses_taken_bsc <- table(df_clean$COURSE_CODE)
 
@@ -244,7 +245,7 @@ head(student_mm)
 ```
 
 ### Extracting gender, citizenship, and residency
-```{r}
+```{r extracting gender, citizenship, and residency from new student rows, eval=FALSE}
 # Loading packages
 library(dplyr)
 
@@ -315,7 +316,7 @@ studentgrades[,c("Student_ID","MATH.101.1","MATH.101.2")]
 
 ```{r loading studentgrades with .1 .2, eval=TRUE}
 load(file = "studentgrades_1.RData")
-head(studentgrades_rep)
+head(studentgrades_rep[,c(1:15)])
 ```
 
 
@@ -347,16 +348,19 @@ for (i in 1:nrow(df_bsc_relevant_courses)){
 }
 
 studentgrades
+# save(studentgrades, file="StudentGrades.RData")
 ```
 
-```{r}
-save(studentgrades, file="StudentGrades.RData")
+```{r loading studentgrades with new student data, eval=TRUE}
+load("StudentGrades.RData")
+studentgrades_new = studentgrades
+head(studentgrades_new[,c(1:15)])
 ```
 
 
 ```{r loading studentgrades using most recent grade, eval=TRUE}
-load("StudentGrades.RData")
-head(studentgrades)
+load("StudentGrades_old.RData")
+head(studentgrades[,c(1:15)])
 ```
 
 
@@ -458,7 +462,7 @@ for(r in 1:nrow(rel_course_profs)){
 save(rel_course_profs, file = "cleaned_profs.RData")
 ```
 
-```{r loading professor cleaning and final data, eval=TRUE}
+```{r loading professor cleaning and final data, eval=FALSE}
 # course_profs
 load("course_profs.RData")
 # rel_course_profs
@@ -626,9 +630,15 @@ for(i in (prof_column_adjust+6):ncol(studentgrades_prof)){
 save(studentgrades_prof, file="Prof_StudentGrades.RData")
 ```
 
-```{r loading studentgrades_prof, eval=TRUE}
+```{r loading studentgrades_prof using new student data, eval=TRUE}
 load(file="Prof_StudentGrades.RData")
-head(studentgrades_prof)
+studentgrades_prof_new = studentgrades_prof
+head(studentgrades_prof_new)
+```
+
+```{r loading studentgrades_prof, eval=TRUE}
+load(file="Prof_StudentGrades_old.RData")
+head(studentgrades_prof[,c(1:10,910:915)])
 ```
 
 
@@ -639,6 +649,12 @@ head(studentgrades_prof)
 # Analysis and Prediction
 
 Throughout my time on this project I have switched which data frame I used to train and test each model and method. The three data frames are described above but are called studentgrades_rep, studentgrades, and studentgrades_prof respectively. For some of the main methods using 'old' data frames I will use other data frames for comparison.
+
+Here I set up a data frame to save all model rmses
+```{r}
+all_model_rmse <- data.frame(rmse = numeric(0), detail = character(0))
+```
+
 
 ## Initial EDA
 
@@ -765,6 +781,26 @@ length(sorted_courses_taken_bsc[sorted_courses_taken_bsc >= N])
 
 ```
 
+This is an oversimplified linear regression on STAT.230 using pre requisite courses. Oversimplified meaning we take COSC.221 and MATH.101 as the pre reqs when in reality they are: One of MATH 101, MATH 103, MATH 142 and one of DATA 101, COSC 221.
+```{r linear regression on stat.230 prerequisites, eval=TRUE}
+rel_grades <- studentgrades[complete.cases(studentgrades$STAT.230, studentgrades$COSC.221, studentgrades$MATH.101), ]
+
+set.seed(5934)
+n_rows <- nrow(rel_grades)
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+lr_model <- lm(STAT.230 ~ COSC.221+MATH.101, data = rel_grades[train_indices,])
+summary(lr_model)
+
+predictions <- predict(lr_model, rel_grades[test_indices,])
+actual <- rel_grades[test_indices,"STAT.230"]
+
+rmse <- sqrt(mean((predictions - actual)^2))
+all_model_rmse <- rbind(all_model_rmse, c(rmse, "Linear Regression on Prerequisites"))
+```
+
+
 ## First Prediction Attempts
 
 These first attempts were made on either studentgrades_rep or studentgrades. Attempts made using studentgrades_prof were added in after for comparison.
@@ -772,10 +808,10 @@ These first attempts were made on either studentgrades_rep or studentgrades. Att
 ### MissForest
 The MissForest package is used to impute missing data. After using it to impute NA's into student grades, we can use the imputed data set with other models which don't allow for missing data/NAs. One of this packages use cases was imputing the data and using it in a Random Forest model. Since imputation is computationally expensive, we only impute on a small number of courses.
 This chunk uses studentgrades_rep and only uses each selected courses first attempt to impute and predict.
-```{r missForest Impute into RF on course first attempts, eval=FALSE}
+```{r missForest Impute into RF on course first attempts, eval=TRUE, warning=FALSE}
 # preparing all student grades with stat230
 stat230grades <- studentgrades_rep[!is.na(studentgrades_rep$STAT.230.1),c("Student_ID","MATH.100.1","MATH.101.1","STAT.230.1","MATH.200.1","MATH.221.1","COSC.211.1","COSC.222.1","COSC.221.1")]
-stat230grades
+head(stat230grades)
 
 library(missForest)
 library(randomForest)
@@ -787,7 +823,7 @@ test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
 
 
 
-stat230.imputed <- missForest(stat230grades[,2:5])$ximp
+stat230.imputed <- missForest(stat230grades[,2:9])$ximp
 
 stat230.rf <- randomForest(STAT.230.1~., data=stat230.imputed[train_indices,] )
 stat230.pred <- predict(stat230.rf, newdata = stat230.imputed[test_indices,])
@@ -796,7 +832,7 @@ stat230.real <- stat230grades[test_indices,]$STAT.230.1
 
 # MSE value to compare to other models
 rmse <- sqrt(mean((stat230.pred - stat230.real)^2))
-rmse
+all_model_rmse <- rbind(all_model_rmse, c(rmse, "MissForest imputation into Random Forest (on studentgrades_rep)"))
 ```
 
 This chunk uses studentgrades with the same few selected courses. While this is one very good result I have tested on a few other seeds and it generally performs quite well. With some CV or other methods this could work well.
@@ -825,7 +861,7 @@ stat230.real <- stat230grades[test_indices,]$STAT.230
 
 # RMSE value to compare to other models
 rmse <- sqrt(mean((stat230.pred - stat230.real)^2))
-rmse
+all_model_rmse <- rbind(all_model_rmse, c(rmse, "MissForest imputation into Random Forest (on studentgrades)"))
 
 # graphs
 ## predicted vs actual plot
@@ -882,7 +918,7 @@ stat230.real <- stat230grades[test_indices,]$STAT.230
 
 # RMSE value to compare to other models
 rmse <- sqrt(mean((stat230.pred - stat230.real)^2))
-rmse
+all_model_rmse <- rbind(all_model_rmse, c(rmse, "MissForest imputation into Random Forest (on studentgrades_prof"))
 
 # graphs
 ## predicted vs actual plot
@@ -904,7 +940,7 @@ In this chunk I cut right to the chase and use the imputed values as grade predi
 set.seed(5934)
 # preparing all student grades with stat230
 stat230grades <- studentgrades[!is.na(studentgrades$STAT.230),c("MATH.100","MATH.101","STAT.230","MATH.200","MATH.221","COSC.211","COSC.222","COSC.221")]
-stat230grades
+# stat230grades
 
 library(missForest)
 library(randomForest)
@@ -926,7 +962,7 @@ stat230.pred <- stat230.imputed[test_indices,]$STAT.230
 
 # MSE value to compare to other models
 rmse <- sqrt(mean((stat230.pred - stat230.real)^2))
-rmse
+all_model_rmse <- rbind(all_model_rmse, c(rmse, "MissForest imputation as prediction (on studentgrades)"))
 ```
 
 
@@ -953,7 +989,7 @@ stat230.real <- stat230grades.full[test_indices,2:5]$STAT.230.1
 
 # MSE value to compare to other models
 rmse <- sqrt(mean((stat230.pred - stat230.real)^2))
-rmse
+all_model_rmse <- rbind(all_model_rmse, c(rmse, "Random Forest on non-NA data (studentgrades_rep)"))
 
 ## MSE of data without DATA101 is 175...
 ## looks like imputing data and running a randomforest is best so far
@@ -982,7 +1018,7 @@ stat230.pred <- predict(stat230.rf, newdata = coursegrades[test_indices,])
 
 # MSE value to compare to other models
 rmse <- sqrt(mean((stat230.pred - stat230.real)^2))
-rmse
+all_model_rmse <- rbind(all_model_rmse, c(rmse, "Random Forest on non-NA data (studentgrades)"))
 ```
 
 This chunk implements missForest and Random Forests to predict grades. However, only courses which have been taken a certain number of times (times_taken = 190) are used as predictors during imputation, training, and testing. This is a rudimentary variable selection method but ensures we use predictors with the most existing data.
@@ -1037,7 +1073,7 @@ stat230.real <- coursegrades[test_indices,]$STAT.230
 
 # RMSE value to compare to other models
 rmse <- sqrt(mean((predictions - stat230.real)^2))
-rmse
+all_model_rmse <- rbind(all_model_rmse, c(rmse, "MissForest imputation into Random Forest (on courses taken by >300 students)"))
 ```
 
 This is a repeat of the last chunk with modifications which make it easier to use different courses as the course we predict for.
@@ -1101,7 +1137,7 @@ rmse
 This section shows my initial attempts at gradient boosted machines. The first chunk uses studentgrades_rep to train and test on.
 ```{r GBM on partial-NA data, eval=TRUE}
 # loading in data again
-stat230grades <- studentgrades_rep[!is.na(studentgrades_rep$STAT.230.1),c("Student_ID","MATH.100.1","MATH.101.1","DATA.101.1","STAT.230.1")]
+stat230grades <- studentgrades_rep[!is.na(studentgrades_rep$STAT.230.1),c("Student_ID","COSC.221.1","MATH.101.1","DATA.101.1","STAT.230.1")]
 n_rows <- nrow(stat230grades)
 
 set.seed(5934)
@@ -1136,14 +1172,14 @@ predictions <- predict(gbm_model, newdata = stat230grades[test_indices,2:5], n.t
 # print(predictions)
 
 rmse <- sqrt(mean((predictions - stat230grades[test_indices,2:5]$STAT.230.1)^2))
-rmse
+all_model_rmse <- rbind(all_model_rmse, c(rmse, "Gradient Boosted Machines using 4 coureses as predictors (on studentgrades_rep)"))
 ## 175 mse... getting worse...
 ```
 
-This chunk uses the complete cases of MATH.100.1, MATH.101.1, STAT.230.1, and DATA.101.1 from studentgrades_rep to train and test. 
+This chunk uses the complete cases of COSC.221.1, MATH.101.1, STAT.230.1, and DATA.101.1 from studentgrades_rep to train and test. 
 ```{r GBM on non-NA data, eval=TRUE}
 # loading in data again TRYING WITH FULL DATA
-stat230grades <- studentgrades_rep[!is.na(studentgrades_rep$MATH.100.1)&!is.na(studentgrades_rep$MATH.101.1)&!is.na(studentgrades_rep$STAT.230.1)&!is.na(studentgrades_rep$DATA.101.1),c("Student_ID","MATH.100.1","MATH.101.1","STAT.230.1","DATA.101.1")]
+stat230grades <- studentgrades_rep[!is.na(studentgrades_rep$MATH.100.1)&!is.na(studentgrades_rep$MATH.101.1)&!is.na(studentgrades_rep$STAT.230.1)&!is.na(studentgrades_rep$DATA.101.1),c("Student_ID","COSC.221.1","MATH.101.1","STAT.230.1","DATA.101.1")]
 # stat230grades
 n_rows <- nrow(stat230grades)
 set.seed(5934)
@@ -1178,15 +1214,15 @@ predictions <- predict(gbm_model, newdata = stat230grades[test_indices,2:5], n.t
 # print(predictions)
 
 rmse <- sqrt(mean((predictions - stat230grades[test_indices,2:5]$STAT.230.1)^2))
-rmse
+all_model_rmse <- rbind(all_model_rmse, c(rmse, "Gradient Boosted Machines on complete cases of 4 courses (on studentgrades_rep)"))
 ## 128 mse which is a little better when you've got full data
 ```
 
 To cover all bases and check if it may be better, we impute grades onto the same courses and train a gbm model. The results are not great but quite a bit better than before.
-```{r missForest impute into GBM, eval=TRUE}
+```{r missForest impute into GBM on studentgrades_rep 4 courses, eval=TRUE}
 # now, does imputing the data before GBM work better?
 # preparing all student grades with stat230
-stat230grades <- studentgrades_rep[!is.na(studentgrades_rep$STAT.230.1),c("Student_ID","MATH.100.1","MATH.101.1","DATA.101.1","STAT.230.1")]
+stat230grades <- studentgrades_rep[!is.na(studentgrades_rep$STAT.230.1),c("Student_ID","COSC.221.1","MATH.101.1","DATA.101.1","STAT.230.1")]
 # stat230grades
 
 library(missForest)
@@ -1227,8 +1263,146 @@ predictions <- predict(gbm_model, newdata = stat230.imputed[test_indices,], n.tr
 # print(predictions)
 
 rmse <- sqrt(mean((predictions - stat230.imputed[test_indices,]$STAT.230.1)^2))
-rmse
+all_model_rmse <- rbind(all_model_rmse, c(rmse, "MissForest imputation into Random Forest on 4 courses (studentgrades_rep)"))
 ## 109 mse.. better still
+```
+
+```{r missForest impute into GBM on studentgrades 4 courses, eval=TRUE}
+# now, does imputing the data before GBM work better?
+# preparing all student grades with stat230
+stat230grades <- studentgrades[!is.na(studentgrades$STAT.230),c("Student_ID","COSC.221","MATH.101","DATA.101","STAT.230")]
+# stat230grades
+
+library(missForest)
+library(gbm)
+
+n_rows <- nrow(stat230grades)
+set.seed(5934)
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+
+
+stat230.imputed <- missForest(stat230grades[,2:5])$ximp
+
+gbm_params <- list(
+  distribution = "gaussian",  # Specify the distribution for regression
+  n.trees = 8000,               # Number of trees (iterations)
+  interaction.depth = 3,       # Maximum depth of trees
+  shrinkage = 0.005,            # Learning rate (shrinkage)
+  bag.fraction = 0.5,          # Fraction of training data used for each tree
+  train.fraction = 1.0,        # Fraction of training data used for training (1.0 for full dataset)
+  n.minobsinnode = 5          # Minimum number of observations in terminal nodes
+)
+
+gbm_model <- gbm(STAT.230 ~ ., data = stat230.imputed[train_indices,], distribution = gbm_params$distribution,
+                 n.trees = gbm_params$n.trees, interaction.depth = gbm_params$interaction.depth,
+                 shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
+                 train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode)
+
+# Print the summary of the trained model
+# print(summary(gbm_model))
+
+# Make predictions on new data
+# Assuming 'new_data' is your new dataframe for prediction
+predictions <- predict(gbm_model, newdata = stat230.imputed[test_indices,], n.trees = gbm_params$n.trees)
+
+# Print the predictions
+# print(predictions)
+
+rmse <- sqrt(mean((predictions - stat230.imputed[test_indices,]$STAT.230)^2))
+all_model_rmse <- rbind(all_model_rmse, c(rmse, "MissForest imputation into Random Forest on 4 courses (studentgrades)"))
+```
+
+```{r missForest impute into GBM on studentgrades all courses, eval=TRUE}
+# now, does imputing the data before GBM work better?
+
+# Identifying the course of interest
+COI <- "STAT.230"
+coursegrades <- studentgrades_prof[!is.na(studentgrades_prof[,COI]),-c(1,3,5)]
+
+# remove all grades < 5%
+coursegrades <- coursegrades[coursegrades$STAT.230 >= 5, ]
+
+# factoring columns
+coursegrades$Major.1 <- factor(coursegrades$Major.1)
+coursegrades$Minor <- factor(coursegrades$Minor)
+
+
+# removing all students who don't meet course pre reqs DATA 101, COSC 221
+coursegrades <- coursegrades[!is.na(coursegrades$DATA.101) | !is.na(coursegrades$COSC.221), ]
+
+# coursegrades <- coursegrades[!is.na(coursegrades$MATH.101), ]
+
+
+# dropping columns that are very sparse (pct % are NA)
+pct <- 0.8
+courses <- numeric(0)
+for (i in 1:ncol(coursegrades)) {
+  if(is.na(coursegrades[,i]) |> sum()  > nrow(coursegrades)*pct){
+    courses <- c(courses,i)
+  }
+}
+
+coursegrades <- coursegrades[,-courses]
+student_columns <- colnames(coursegrades)[c(1:5)]
+
+
+# Removing all course columns of higher years
+YOI <- as.integer(substr(strsplit(COI, split = ".", fixed = TRUE)[[1]][2],1,1))
+
+column_names <- colnames(coursegrades)[6:length(colnames(coursegrades))]
+
+# Extract digits after the period in column names
+column_digits <- as.integer(sub("^[^.]+\\.([0-9]).*", "\\1", column_names))
+
+# Find columns with digits not matching the selected course year
+cols_to_keep <- c(student_columns, column_names[column_digits <= YOI])
+
+# All columns in the same year or below
+coursegrades <- coursegrades[, colnames(coursegrades) %in% cols_to_keep]
+
+
+
+library(missForest)
+library(gbm)
+
+n_rows <- nrow(coursegrades)
+set.seed(5934)
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+
+
+stat230.imputed <- missForest(coursegrades)$ximp
+
+gbm_params <- list(
+  distribution = "gaussian",  # Specify the distribution for regression
+  n.trees = 8000,               # Number of trees (iterations)
+  interaction.depth = 3,       # Maximum depth of trees
+  shrinkage = 0.005,            # Learning rate (shrinkage)
+  bag.fraction = 0.5,          # Fraction of training data used for each tree
+  train.fraction = 1.0,        # Fraction of training data used for training (1.0 for full dataset)
+  n.minobsinnode = 5          # Minimum number of observations in terminal nodes
+)
+
+gbm_model <- gbm(STAT.230 ~ ., data = stat230.imputed[train_indices,], distribution = gbm_params$distribution,
+                 n.trees = gbm_params$n.trees, interaction.depth = gbm_params$interaction.depth,
+                 shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
+                 train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode)
+
+# Print the summary of the trained model
+# print(summary(gbm_model))
+
+# Make predictions on new data
+# Assuming 'new_data' is your new dataframe for prediction
+predictions <- predict(gbm_model, newdata = stat230.imputed[test_indices,], n.trees = gbm_params$n.trees)
+
+# Print the predictions
+# print(predictions)
+
+rmse <- sqrt(mean((predictions - stat230.imputed[test_indices,]$STAT.230)^2))
+all_model_rmse <- rbind(all_model_rmse, c(rmse, "MissForest imputation into Random Forest on all courses (studentgrades)"))
 ```
 
 This chunk will use students grades of the current year (eg. second year uses STAT.230 and COSC.221) to train the GBM model. However, the test set will have grades from the current year removed (eg. won't use COSC.221 as a predictor). In hindsight this isn't a great idea when using GBMs as the decision trees used won't be configured for the subset of courses used. Also to note, this uses studentgrades_rep.
@@ -1393,10 +1567,8 @@ for(i in 1:nrow(predicted_grades)){
 # print(predicted_grades)
 
 
-# Calculate MSE for observed (non-NA) grades
-observed_indices <- which(!is.na(grades))
 rmse <- sqrt(mean((predicted_grades$grade - data_obj[test_indices,]$grade)^2))
-rmse
+all_model_rmse <- rbind(all_model_rmse, c(rmse, "Matrix Factorization on the 199 courses taken the most times (studentgrades)"))
 ```
 
 ### Structured Learning
@@ -1511,6 +1683,9 @@ ggplot(SVRFitCoarse)
 SVRFitCoarse$finalModel
 
 yPred <- predict(SVRFitCoarse$finalModel, xtest)
+
+rmse <- sqrt(mean((yPred - ytest)^2))
+all_model_rmse <- rbind(all_model_rmse, c(rmse, "MissForest impute into Support Vector Machines (on studentgrades)"))
 ```
 
 ### Recursive Feature Elimination
@@ -1563,8 +1738,8 @@ ggplot(data = result_rfe1, metric = "Kappa") + theme_bw()
 
 ### LASSO Feature Selection
 In this section there are two incomplete chunks of code. I had moved off of working on feature selection as we deemed GBMs were doing a good job at indicating which courses are the most important. 
-lasso regression doesn't handle NA values so I tried to avoid that by using na.action = na.exclude. However, that didn't work.
-```{r LASSO feature selection, eval=TRUE}
+lasso regression doesn't handle NA values so I tried to avoid that by using na.action = na.exclude. However, that didn't work. Error: Every row has at least one missing value were found
+```{r LASSO feature selection, eval=FALSE}
 cv_5 <- trainControl(method="cv", number=5)
 studentgrades_stat230 <- studentgrades[!is.na(studentgrades$STAT.230),]
 lasso <- train(STAT.230 ~., data=studentgrades_stat230, method='lasso',  trControl=cv_5, na.action = na.exclude)
@@ -1625,7 +1800,7 @@ F_{m}(x) = F_{m-1}(x) + \nu h_m(x)
 ### Data Preperation
 To prepare the data fror gradient boosting, I did some cleaning to ensure the data used for training and testing would be available at the time of prediction for the student. For example, a student who wishes to predict their future STAT 230 grade wouldn't typically have 3rd or 4th year courses already completed. And definately wouldn't have grades for any courses with STAT 230 as a prereq.
 In this chunk we remove data which doesn't add to the training process. Immediately this is student ID, a students' 2nd major, and whether they're in honors (this could be included but isn't for now). After removing all students who don't have the pre requeset courses, columns (courses) are dropped if they are make up of too many NA values. In our case we want at least 20% of the data to be non-NA. This number was made arbitrarily to reduce the number of courses trained on. The best level of NA values used would be different depending on the course being predicted on. After that, we removed all courses from higher year levels as we wouldn't expect them to be taken.
-```{r GBM data prep, eval=TRUE}
+```{r GBM data prep COSC.221, eval=FALSE}
 # Identifying the course of interest
 COI <- "COSC.221"
 coursegrades <- studentgrades_prof[!is.na(studentgrades_prof[,COI]),-c(1,3,5)]
@@ -1681,7 +1856,7 @@ coursegrades <- coursegrades[, colnames(coursegrades) %in% cols_to_keep]
 head(coursegrades)
 ```
 
-This chunk is for initializing STAT 230 GBM code as this was the main course I was testing on.
+This chunk is for initializing STAT 230 GBM code as this was the main course I was testing on. It prepares a data frame to be passed into the GBM model for training and testing. The first data frame used includes students' grades (without the new rows added) and professor data.
 ```{r GBM data prep STAT230, eval=TRUE}
 # Identifying the course of interest
 COI <- "STAT.230"
@@ -1693,15 +1868,9 @@ coursegrades <- coursegrades[coursegrades$STAT.230 >= 5, ]
 # factoring columns
 coursegrades$Major.1 <- factor(coursegrades$Major.1)
 coursegrades$Minor <- factor(coursegrades$Minor)
-coursegrades$Gender <- factor(coursegrades$Gender)
-coursegrades$Citizenship <- factor(coursegrades$Citizenship)
-coursegrades$Residency <- factor(coursegrades$Residency)
-
 
 # removing all students who don't meet course pre reqs DATA 101, COSC 221
 coursegrades <- coursegrades[!is.na(coursegrades$DATA.101) | !is.na(coursegrades$COSC.221), ]
-
-# coursegrades <- coursegrades[!is.na(coursegrades$MATH.101), ]
 
 
 # dropping columns that are very sparse (pct % are NA)
@@ -1714,7 +1883,7 @@ for (i in 1:ncol(coursegrades)) {
 }
 
 coursegrades <- coursegrades[,-courses]
-student_columns <- colnames(coursegrades)[c(1,2)]
+student_columns <- colnames(coursegrades)[c(1:2)]
 
 
 # Removing all course columns of higher years
@@ -1735,8 +1904,11 @@ coursegrades <- coursegrades[, colnames(coursegrades) %in% cols_to_keep]
 head(coursegrades)
 ```
 
+
+
+
 ### Analysis
-In this chunk we run the entire data set through a GBM which trains the data in its entirety (there is 10-fold cross validation). From there we can find the performance of the GBM using both cross validation and OOB to display the optimal number of iterations.
+In this chunk we run the entire data set through a GBM which trains the data in its entirety (there is 10-fold cross validation). From there we can find the performance of the GBM using both cross validation and OOB to display the optimal number of iterations. We determine that with a learning rate of 0.001 there is no need for any more than 8000 iterations.
 ```{r finding ideal number of GBM tree graphs to use, eval=FALSE}
 library(gbm)
 
@@ -1761,8 +1933,8 @@ print(gbm.perf(gbm_model, method="cv"))
 print(gbm.perf(gbm_model, method="OOB"))
 ```
 
-The optimal number of iterations is used when training the model to ensure efficiency. CV folds is the only thing which hasn't been strenuesly tested to find the optinal number of folds. Additionally, we print out the model summary, use the model to predict grades, and calculate the rmse of the predicted grades.
-```{r GBM model training, eval=TRUE}
+The optimal number of iterations is used when training the model to ensure efficiency. CV folds is the only thing which hasn't been strenuously tested to find the optimal number of folds. Additionally, we print out the model summary, use the model to predict grades, and calculate the rmse of the predicted grades.
+```{r GBM model training, eval=TRUE, warning=FALSE}
 set.seed(5934)
 n_rows <- nrow(coursegrades)
 train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
@@ -1774,9 +1946,9 @@ gbm_params <- list(
   distribution = "gaussian",  # Specify the distribution for regression
   n.trees = 8000,               # Number of trees (iterations)
   interaction.depth = 3,       # Maximum depth of trees
-  shrinkage = 0.005,            # Learning rate (shrinkage)
+  shrinkage = 0.001,            # Learning rate (shrinkage)
   bag.fraction = 0.5,          # Fraction of training data used for each tree
-  train.fraction = 1.0,        # Fraction of training data used for training (1.0 for full dataset)
+  train.fraction = 0.9,        # Fraction of training data used for training (1.0 for full dataset)
   n.minobsinnode = 5          # Minimum number of observations in terminal nodes
 )
 
@@ -1807,7 +1979,305 @@ predictions <- predict(gbm_model, newdata = coursegrades[test_indices,], n.trees
 actual <- coursegrades[test_indices,]$STAT.230
 
 rmse <- sqrt(mean((predictions - actual)^2))
-rmse
+all_model_rmse <- rbind(all_model_rmse, c(rmse, "Gradient Boosted Machine (on studentgrades_prof)"))
+```
+
+#### GBM Comparisons
+The first one is a gradient boosted model performed on the new studentgrades data with professors included.
+```{r GBM on studentgrades_prof_new, eval=TRUE}
+# Identifying the course of interest
+COI <- "STAT.230"
+coursegrades <- studentgrades_prof_new[!is.na(studentgrades_prof_new[,COI]),-c(1,3,5)]
+
+# remove all grades < 5%
+coursegrades <- coursegrades[coursegrades$STAT.230 >= 5, ]
+
+# factoring columns
+coursegrades$Major.1 <- factor(coursegrades$Major.1)
+coursegrades$Minor <- factor(coursegrades$Minor)
+coursegrades$Gender <- factor(coursegrades$Gender)
+coursegrades$Citizenship <- factor(coursegrades$Citizenship)
+coursegrades$Residency <- factor(coursegrades$Residency)
+
+
+# removing all students who don't meet course pre reqs DATA 101, COSC 221
+coursegrades <- coursegrades[!is.na(coursegrades$DATA.101) | !is.na(coursegrades$COSC.221), ]
+
+# coursegrades <- coursegrades[!is.na(coursegrades$MATH.101), ]
+
+
+# dropping columns that are very sparse (pct % are NA)
+pct <- 0.8
+courses <- numeric(0)
+for (i in 1:ncol(coursegrades)) {
+  if(is.na(coursegrades[,i]) |> sum()  > nrow(coursegrades)*pct){
+    courses <- c(courses,i)
+  }
+}
+
+coursegrades <- coursegrades[,-courses]
+student_columns <- colnames(coursegrades)[c(1:5)]
+
+
+# Removing all course columns of higher years
+YOI <- as.integer(substr(strsplit(COI, split = ".", fixed = TRUE)[[1]][2],1,1))
+
+column_names <- colnames(coursegrades)[6:length(colnames(coursegrades))]
+
+# Extract digits after the period in column names
+column_digits <- as.integer(sub("^[^.]+\\.([0-9]).*", "\\1", column_names))
+
+# Find columns with digits not matching the selected course year
+cols_to_keep <- c(student_columns, column_names[column_digits <= YOI])
+
+# All columns in the same year or below
+coursegrades <- coursegrades[, colnames(coursegrades) %in% cols_to_keep]
+
+# display data to be used
+head(coursegrades)
+
+set.seed(5934)
+n_rows <- nrow(coursegrades)
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+library(gbm)
+
+gbm_params <- list(
+  distribution = "gaussian",  # Specify the distribution for regression
+  n.trees = 8000,               # Number of trees (iterations)
+  interaction.depth = 3,       # Maximum depth of trees
+  shrinkage = 0.001,            # Learning rate (shrinkage)
+  bag.fraction = 0.5,          # Fraction of training data used for each tree
+  train.fraction = 0.9,        # Fraction of training data used for training (1.0 for full dataset)
+  n.minobsinnode = 5          # Minimum number of observations in terminal nodes
+)
+
+# Running model first time on base params
+gbm_model <- gbm(STAT.230 ~ ., data = coursegrades, distribution = gbm_params$distribution,
+                 n.trees = gbm_params$n.trees, interaction.depth = gbm_params$interaction.depth,
+                 shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
+                 train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 5)
+
+# saving optimal # of trees
+ntrees <- gbm.perf(gbm_model,method="cv")[1]
+
+
+
+# Running model a second time with optimal # of trees
+gbm_model <- gbm(STAT.230 ~ ., data = coursegrades[train_indices,], distribution = gbm_params$distribution,
+                 n.trees = ntrees, interaction.depth = gbm_params$interaction.depth,
+                 shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
+                 train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 5)
+
+# Print the summary of the trained model
+print(summary(gbm_model))
+
+# Make predictions on new data
+predictions <- predict(gbm_model, newdata = coursegrades[test_indices,], n.trees = ntrees)
+
+# save real grades
+actual <- coursegrades[test_indices,]$STAT.230
+
+rmse <- sqrt(mean((predictions - actual)^2))
+all_model_rmse <- rbind(all_model_rmse, c(rmse, "Gradient Boosted Machine (on studentgrades_prof_new)"))
+```
+
+This GBM model uses both original and new students' grades without the professor data.
+```{r GBM on studentgrades_new, eval=TRUE}
+# Identifying the course of interest
+COI <- "STAT.230"
+coursegrades <- studentgrades_new[!is.na(studentgrades_new[,COI]),-c(1,3,5)]
+
+# remove all grades < 5%
+coursegrades <- coursegrades[coursegrades$STAT.230 >= 5, ]
+
+# factoring columns
+coursegrades$Major.1 <- factor(coursegrades$Major.1)
+coursegrades$Minor <- factor(coursegrades$Minor)
+coursegrades$Gender <- factor(coursegrades$Gender)
+coursegrades$Citizenship <- factor(coursegrades$Citizenship)
+coursegrades$Residency <- factor(coursegrades$Residency)
+
+
+# removing all students who don't meet course pre reqs DATA 101, COSC 221
+coursegrades <- coursegrades[!is.na(coursegrades$DATA.101) | !is.na(coursegrades$COSC.221), ]
+
+# coursegrades <- coursegrades[!is.na(coursegrades$MATH.101), ]
+
+
+# dropping columns that are very sparse (pct % are NA)
+pct <- 0.8
+courses <- numeric(0)
+for (i in 1:ncol(coursegrades)) {
+  if(is.na(coursegrades[,i]) |> sum()  > nrow(coursegrades)*pct){
+    courses <- c(courses,i)
+  }
+}
+
+coursegrades <- coursegrades[,-courses]
+student_columns <- colnames(coursegrades)[c(1:5)]
+
+
+# Removing all course columns of higher years
+YOI <- as.integer(substr(strsplit(COI, split = ".", fixed = TRUE)[[1]][2],1,1))
+
+column_names <- colnames(coursegrades)[6:length(colnames(coursegrades))]
+
+# Extract digits after the period in column names
+column_digits <- as.integer(sub("^[^.]+\\.([0-9]).*", "\\1", column_names))
+
+# Find columns with digits not matching the selected course year
+cols_to_keep <- c(student_columns, column_names[column_digits <= YOI])
+
+# All columns in the same year or below
+coursegrades <- coursegrades[, colnames(coursegrades) %in% cols_to_keep]
+
+# display data to be used
+head(coursegrades)
+
+set.seed(5934)
+n_rows <- nrow(coursegrades)
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+library(gbm)
+
+gbm_params <- list(
+  distribution = "gaussian",  # Specify the distribution for regression
+  n.trees = 8000,               # Number of trees (iterations)
+  interaction.depth = 3,       # Maximum depth of trees
+  shrinkage = 0.001,            # Learning rate (shrinkage)
+  bag.fraction = 0.5,          # Fraction of training data used for each tree
+  train.fraction = 0.9,        # Fraction of training data used for training (1.0 for full dataset)
+  n.minobsinnode = 5          # Minimum number of observations in terminal nodes
+)
+
+# Running model first time on base params
+gbm_model <- gbm(STAT.230 ~ ., data = coursegrades, distribution = gbm_params$distribution,
+                 n.trees = gbm_params$n.trees, interaction.depth = gbm_params$interaction.depth,
+                 shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
+                 train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 5)
+
+# saving optimal # of trees
+ntrees <- gbm.perf(gbm_model,method="cv")[1]
+
+
+
+# Running model a second time with optimal # of trees
+gbm_model <- gbm(STAT.230 ~ ., data = coursegrades[train_indices,], distribution = gbm_params$distribution,
+                 n.trees = ntrees, interaction.depth = gbm_params$interaction.depth,
+                 shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
+                 train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 5)
+
+# Print the summary of the trained model
+# print(summary(gbm_model))
+
+# Make predictions on new data
+predictions <- predict(gbm_model, newdata = coursegrades[test_indices,], n.trees = ntrees)
+
+# save real grades
+actual <- coursegrades[test_indices,]$STAT.230
+
+rmse <- sqrt(mean((predictions - actual)^2))
+all_model_rmse <- rbind(all_model_rmse, c(rmse, "Gradient Boosted Machine (on studentgrades_new)"))
+```
+
+The final GBM model uses the original studentgrades data set with no professors.
+```{r GBM on studentgrades, eval=TRUE}
+# Identifying the course of interest
+COI <- "STAT.230"
+coursegrades <- studentgrades[!is.na(studentgrades[,COI]),-c(1,3,5)]
+
+# remove all grades < 5%
+coursegrades <- coursegrades[coursegrades$STAT.230 >= 5, ]
+
+# factoring columns
+coursegrades$Major.1 <- factor(coursegrades$Major.1)
+coursegrades$Minor <- factor(coursegrades$Minor)
+
+
+# removing all students who don't meet course pre reqs DATA 101, COSC 221
+coursegrades <- coursegrades[!is.na(coursegrades$DATA.101) | !is.na(coursegrades$COSC.221), ]
+
+# coursegrades <- coursegrades[!is.na(coursegrades$MATH.101), ]
+
+
+# dropping columns that are very sparse (pct % are NA)
+pct <- 0.8
+courses <- numeric(0)
+for (i in 1:ncol(coursegrades)) {
+  if(is.na(coursegrades[,i]) |> sum()  > nrow(coursegrades)*pct){
+    courses <- c(courses,i)
+  }
+}
+
+coursegrades <- coursegrades[,-courses]
+student_columns <- colnames(coursegrades)[c(1:2)]
+
+
+# Removing all course columns of higher years
+YOI <- as.integer(substr(strsplit(COI, split = ".", fixed = TRUE)[[1]][2],1,1))
+
+column_names <- colnames(coursegrades)[6:length(colnames(coursegrades))]
+
+# Extract digits after the period in column names
+column_digits <- as.integer(sub("^[^.]+\\.([0-9]).*", "\\1", column_names))
+
+# Find columns with digits not matching the selected course year
+cols_to_keep <- c(student_columns, column_names[column_digits <= YOI])
+
+# All columns in the same year or below
+coursegrades <- coursegrades[, colnames(coursegrades) %in% cols_to_keep]
+
+# display data to be used
+head(coursegrades)
+
+set.seed(5934)
+n_rows <- nrow(coursegrades)
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+library(gbm)
+
+gbm_params <- list(
+  distribution = "gaussian",  # Specify the distribution for regression
+  n.trees = 8000,               # Number of trees (iterations)
+  interaction.depth = 3,       # Maximum depth of trees
+  shrinkage = 0.001,            # Learning rate (shrinkage)
+  bag.fraction = 0.5,          # Fraction of training data used for each tree
+  train.fraction = 0.9,        # Fraction of training data used for training (1.0 for full dataset)
+  n.minobsinnode = 5          # Minimum number of observations in terminal nodes
+)
+
+# Running model first time on base params
+gbm_model <- gbm(STAT.230 ~ ., data = coursegrades, distribution = gbm_params$distribution,
+                 n.trees = gbm_params$n.trees, interaction.depth = gbm_params$interaction.depth,
+                 shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
+                 train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 5)
+
+# saving optimal # of trees
+ntrees <- gbm.perf(gbm_model,method="cv")[1]
+
+
+
+# Running model a second time with optimal # of trees
+gbm_model <- gbm(STAT.230 ~ ., data = coursegrades[train_indices,], distribution = gbm_params$distribution,
+                 n.trees = ntrees, interaction.depth = gbm_params$interaction.depth,
+                 shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
+                 train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 5)
+
+# Print the summary of the trained model
+print(summary(gbm_model))
+
+# Make predictions on new data
+predictions <- predict(gbm_model, newdata = coursegrades[test_indices,], n.trees = ntrees)
+
+# save real grades
+actual <- coursegrades[test_indices,]$STAT.230
+
+rmse <- sqrt(mean((predictions - actual)^2))
+all_model_rmse <- rbind(all_model_rmse, c(rmse, "Gradient Boosted Machine (on studentgrades)"))
 ```
 
 
@@ -1882,7 +2352,7 @@ gbm_params <- list(
 )
 
 # Running model first time on base params
-gbm_model <- gbm(COSC.221 ~ ., data = coursegrades[train_indices,], distribution = gbm_params$distribution,
+gbm_model <- gbm(STAT.230 ~ ., data = coursegrades[train_indices,], distribution = gbm_params$distribution,
                  n.trees = gbm_params$n.trees, interaction.depth = gbm_params$interaction.depth,
                  shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
                  train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 5)
@@ -1901,7 +2371,7 @@ gbm_params <- list(
 )
 
 # Running model first time on base params
-gbm_model <- gbm(COSC.221 ~ ., data = coursegrades[train_indices,], distribution = gbm_params$distribution,
+gbm_model <- gbm(STAT.230 ~ ., data = coursegrades[train_indices,], distribution = gbm_params$distribution,
                  n.trees = gbm_params$n.trees, interaction.depth = gbm_params$interaction.depth,
                  shrinkage = gbm_params$shrinkage, bag.fraction = gbm_params$bag.fraction,
                  train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 5)
@@ -1922,7 +2392,7 @@ abline(0, 1, col = "red")
 ```
 
 Our final way of calculating error bars is by bootstrapping the model 50 times and using the standard deviation to calculate the upper and lower bound for each grade predicted. 
-```{r bootstrap gbm error bars, eval=FALSE}
+```{r bootstrap gbm error bars, eval=TRUE}
 # bootstrapping the model x times
 n_iterations = 50  # Number of bootstrapped models
 boot_preds = numeric(0)
@@ -2104,10 +2574,12 @@ for(loop in 1:floor((ncol(coursegrades)-3)/2)){
   
 }
 
+save(model_perf, file = "model_perf.RData")
 ```
 
-This table shows 
+This table shows the models performance as the 'least relevant' courses are removed. Courses are rated to each other based on their relative influence on the model. We take the two courses listed as having the least relative influence and remove them from the next model run. This was repeated until no more courses remained. The table below shows the models test rmse. The two courses in each row were removed prior to training the model. The first row shows the performance with no columns removed. Note: this is additional variable selection performed after removing all columns with more than 80% NA values.
 ```{r GBM rvs, eval=TRUE}
+load("model_perf.RData")
 model_perf
 ```
 
@@ -2367,6 +2839,17 @@ ggplot(as.data.frame(confusion_matrix$table), aes(x = actual_letter, y = predict
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   geom_tile(data = subset(as.data.frame(confusion_matrix$table), actual_letter == predictions_letter),
             aes(fill = Freq), color = "black")
+```
+
+# Model Comparison
+Here we plot the rmse of each model performed with a brief description. All models were trained to predict a student's STAT 230 grade. The same train and test sets were used, with the exception of models using new student data.
+```{r}
+colnames(all_model_rmse) <- c("RMSE", "Model Details")
+
+
+plot(all_model_rmse$RMSE, ylim=c(6.5,15), ylab = "RMSE", xlab = "Model Index", main = "RMSE of Model")
+
+all_model_rmse
 ```
 
 

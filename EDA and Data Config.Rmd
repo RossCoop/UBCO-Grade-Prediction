@@ -60,6 +60,10 @@ df_bsc
 save(df_bsc, file = "student-data.RData")
 ```
 
+```{r}
+df_clean = df_clean[,-c(15:17)]
+```
+
 
 ```{r}
 # Determining how many bsc students took each course
@@ -277,9 +281,9 @@ studentgrades
 ```
 
 ```{r}
-load(file = "StudentGrades.RData")
+# load(file = "StudentGrades_old.RData")
 
-save(studentgrades, file = "StudentGrades.RData")
+save(studentgrades, file = "StudentGrades_old.RData")
 ```
 
 
@@ -542,9 +546,9 @@ for(i in (prof_column_adjust+6):ncol(studentgrades_prof)){
 ```
 
 ```{r saving studentgrades_prof}
-load(file="Prof_StudentGrades.RData")
+# load(file="Prof_StudentGrades.RData")
 
-save(studentgrades_prof, file="Prof_StudentGrades.RData")
+save(studentgrades_prof, file="Prof_StudentGrades_old.RData")
 ```
 
 
