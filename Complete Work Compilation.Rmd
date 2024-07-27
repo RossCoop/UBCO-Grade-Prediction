@@ -892,6 +892,9 @@ qqnorm(residuals, main = "Normal Q-Q Plot of Residuals")
 qqline(residuals, col = "red")
 ```
 
+
+
+
 In this chunk I wanted to try a method that worked before with the new studentgrades_prof data. As we can see it still works even when imputing professor data.
 ```{r missForest Impute into RF on studentgrades_prof, eval=TRUE}
 set.seed(5934)
@@ -934,6 +937,93 @@ line.lm <- lm(predictions~actual)
 abline(line.lm, col = "green")
 
 ```
+
+
+```{r missForest Impute into RF on all studentgrades_prof courses, eval=TRUE}
+
+# Identifying the course of interest
+COI <- "STAT.230"
+coursegrades <- studentgrades_prof[!is.na(studentgrades_prof[,COI]),-c(1,3,5)]
+
+# remove all grades < 5%
+coursegrades <- coursegrades[coursegrades$STAT.230 >= 5, ]
+
+# factoring columns
+coursegrades$Major.1 <- factor(coursegrades$Major.1)
+coursegrades$Minor <- factor(coursegrades$Minor)
+
+
+# removing all students who don't meet course pre reqs DATA 101, COSC 221
+coursegrades <- coursegrades[!is.na(coursegrades$DATA.101) | !is.na(coursegrades$COSC.221), ]
+
+# coursegrades <- coursegrades[!is.na(coursegrades$MATH.101), ]
+
+
+# dropping columns that are very sparse (pct % are NA)
+pct <- 0.8
+courses <- numeric(0)
+for (i in 1:ncol(coursegrades)) {
+  if(is.na(coursegrades[,i]) |> sum()  > nrow(coursegrades)*pct){
+    courses <- c(courses,i)
+  }
+}
+
+coursegrades <- coursegrades[,-courses]
+student_columns <- colnames(coursegrades)[c(1:5)]
+
+
+# Removing all course columns of higher years
+YOI <- as.integer(substr(strsplit(COI, split = ".", fixed = TRUE)[[1]][2],1,1))
+
+column_names <- colnames(coursegrades)[6:length(colnames(coursegrades))]
+
+# Extract digits after the period in column names
+column_digits <- as.integer(sub("^[^.]+\\.([0-9]).*", "\\1", column_names))
+
+# Find columns with digits not matching the selected course year
+cols_to_keep <- c(student_columns, column_names[column_digits <= YOI])
+
+# All columns in the same year or below
+coursegrades <- coursegrades[, colnames(coursegrades) %in% cols_to_keep]
+
+head(coursegrades)
+
+library(missForest)
+library(randomForest)
+
+n_rows <- nrow(coursegrades)
+set.seed(5934)
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+
+
+stat230.imputed <- missForest(coursegrades)$ximp
+
+stat230.rf <- randomForest(STAT.230~., data=stat230.imputed[train_indices,] )
+stat230.pred <- predict(stat230.rf, newdata = stat230.imputed[test_indices,])
+
+stat230.real <- coursegrades[test_indices,]$STAT.230
+
+# RMSE value to compare to other models
+rmse <- sqrt(mean((stat230.pred - stat230.real)^2))
+all_model_rmse <- rbind(all_model_rmse, c(rmse, "MissForest imputation into Random Forest using all courses (on studentgrades_prof)"))
+
+# graphs
+## predicted vs actual plot
+predictions <- stat230.pred
+actual <- stat230.real
+
+
+plot(actual, predictions, xlab = "Actual Grades", ylab = "Predicted Grades", 
+     main = "Predicted vs Actual Grades", pch = 16, col = "blue", xlim = c(0,100), ylim = c(0,100))
+abline(0, 1, col = "red")
+
+line.lm <- lm(predictions~actual)
+abline(line.lm, col = "green")
+
+```
+
 
 In this chunk I cut right to the chase and use the imputed values as grade predictions. As expected it doesn't work very well.
 ```{r Using missForest for prediction, eval=TRUE}
