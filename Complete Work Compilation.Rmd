@@ -837,9 +837,9 @@ all_model_rmse <- rbind(all_model_rmse, c(rmse, "MissForest imputation into Rand
 
 This chunk uses studentgrades with the same few selected courses. While this is one very good result I have tested on a few other seeds and it generally performs quite well. With some CV or other methods this could work well.
 ```{r missForest Impute into RF using few courses (stats maths cosc), eval=TRUE}
-set.seed(5934)
+
 # preparing all student grades with stat230
-stat230grades <- studentgrades[!is.na(studentgrades$STAT.230),c("Student_ID","MATH.100","MATH.101","STAT.230","MATH.200","MATH.221","COSC.211","COSC.222","COSC.221")]
+stat230grades <- studentgrades[!is.na(studentgrades$STAT.230),c("Student_ID","STAT.230","MATH.100","MATH.101","MATH.200","MATH.221","COSC.211","COSC.222","COSC.221")]
 # stat230grades
 
 library(missForest)
@@ -847,15 +847,15 @@ library(randomForest)
 
 n_rows <- nrow(stat230grades)
 
+set.seed(5934)
 train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
 test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
-
 
 
 stat230.imputed <- missForest(stat230grades[,2:9])$ximp
 
 stat230.rf <- randomForest(STAT.230~., data=stat230.imputed[train_indices,] )
-stat230.pred <- predict(stat230.rf, newdata = stat230.imputed[test_indices,])
+stat230.pred <- predict(stat230.rf, newdata = stat230.imputed[test_indices,-1])
 
 stat230.real <- stat230grades[test_indices,]$STAT.230
 
@@ -892,7 +892,64 @@ qqnorm(residuals, main = "Normal Q-Q Plot of Residuals")
 qqline(residuals, col = "red")
 ```
 
+```{r missForest Impute into RF using few courses (stats maths cosc), eval=TRUE}
 
+# preparing all student grades with stat230
+stat230grades <- studentgrades[!is.na(studentgrades$STAT.230),c("Student_ID","STAT.230","MATH.100","MATH.101","MATH.200","MATH.221","COSC.211","COSC.222","COSC.221")]
+# stat230grades
+
+library(missForest)
+library(randomForest)
+
+n_rows <- nrow(stat230grades)
+
+set.seed(5934)
+train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
+test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
+
+# imputation section
+stat230.imputed.train <- missForest(stat230grades[train_indices,2:9])$ximp
+stat230.imputed <- missForest(rbind(stat230.imputed.train[,-1],stat230grades[test_indices,-c(1,2)]))$ximp
+
+# Random Forest section
+stat230.rf <- randomForest(STAT.230~., data=stat230.imputed.train)
+stat230.pred <- predict(stat230.rf, newdata = stat230.imputed[test_indices,])
+
+stat230.real <- stat230grades[test_indices,]$STAT.230
+
+# RMSE value to compare to other models
+rmse <- sqrt(mean((stat230.pred - stat230.real)^2))
+rmse
+# all_model_rmse <- rbind(all_model_rmse, c(rmse, "MissForest imputation into Random Forest (on studentgrades)"))
+
+# graphs
+## predicted vs actual plot
+predictions <- stat230.pred
+actual <- stat230.real
+
+
+plot(actual, predictions, xlab = "Actual Grades", ylab = "Predicted Grades", 
+     main = "Predicted vs Actual Grades", pch = 16, col = "blue", xlim = c(0,100), ylim = c(0,100))
+abline(0, 1, col = "red")
+
+line.lm <- lm(predictions~actual)
+abline(line.lm, col = "green")
+
+
+## residuals plot
+residuals <- actual - predictions
+plot(predictions, residuals, xlab = "Predicted Grades", ylab = "Residuals", 
+     main = "Residual Plot", pch = 16, col = "blue")
+abline(h = 0, col = "red")
+
+line.lm <- lm(residuals~predictions)
+abline(line.lm, col = "green")
+
+
+## qq plots
+qqnorm(residuals, main = "Normal Q-Q Plot of Residuals")
+qqline(residuals, col = "red")
+```
 
 
 In this chunk I wanted to try a method that worked before with the new studentgrades_prof data. As we can see it still works even when imputing professor data.
