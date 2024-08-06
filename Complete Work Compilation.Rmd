@@ -2613,6 +2613,99 @@ coursegrades.d301 <- coursegrades.d301[, colnames(coursegrades.d301) %in% cols_t
 
 # display data to be used
 coursegrades.d301
+
+
+# MATH 221
+COI <- "MATH.221"
+coursegrades.m221 <- studentgrades_prof[!is.na(studentgrades_prof[,COI]),-c(1,3,5)]
+
+# remove all grades < 5%
+coursegrades.m221 <- coursegrades.m221[coursegrades.m221$MATH.221 >= 5, ]
+
+# factoring columns
+coursegrades.m221$Major.1 <- factor(coursegrades.m221$Major.1)
+coursegrades.m221$Minor <- factor(coursegrades.m221$Minor)
+
+# removing all students who don't meet course pre reqs DATA 101, COSC 221
+# coursegrades <- coursegrades[!is.na(coursegrades$DATA.101) | !is.na(coursegrades$COSC.221), ]
+
+
+# dropping columns that are very sparse (pct % are NA)
+pct <- 0.8
+courses <- numeric(0)
+for (i in 1:ncol(coursegrades.m221)) {
+  if(is.na(coursegrades.m221[,i]) |> sum()  > nrow(coursegrades.m221)*pct){
+    courses <- c(courses,i)
+  }
+}
+
+coursegrades.m221 <- coursegrades.m221[,-courses]
+student_columns <- colnames(coursegrades.m221)[c(1:2)]
+
+
+# Removing all course columns of higher years
+YOI <- as.integer(substr(strsplit(COI, split = ".", fixed = TRUE)[[1]][2],1,1))
+
+column_names <- colnames(coursegrades.m221)[6:length(colnames(coursegrades.m221))]
+
+# Extract digits after the period in column names
+column_digits <- as.integer(sub("^[^.]+\\.([0-9]).*", "\\1", column_names))
+
+# Find columns with digits not matching the selected course year
+cols_to_keep <- c(student_columns, column_names[column_digits <= YOI])
+
+# All columns in the same year or below
+coursegrades.m221 <- coursegrades.m221[, colnames(coursegrades.m221) %in% cols_to_keep]
+
+# display data to be used
+coursegrades.m221
+
+
+
+# STAT 303
+COI <- "STAT.303"
+coursegrades.s303 <- studentgrades_prof[!is.na(studentgrades_prof[,COI]),-c(1,3,5)]
+
+# remove all grades < 5%
+coursegrades.s303 <- coursegrades.s303[coursegrades.s303$STAT.303 >= 5, ]
+
+# factoring columns
+coursegrades.s303$Major.1 <- factor(coursegrades.s303$Major.1)
+coursegrades.s303$Minor <- factor(coursegrades.s303$Minor)
+
+# removing all students who don't meet course pre reqs DATA 101, COSC 221
+# coursegrades <- coursegrades[!is.na(coursegrades$DATA.101) | !is.na(coursegrades$COSC.221), ]
+
+
+# dropping columns that are very sparse (pct % are NA)
+pct <- 0.8
+courses <- numeric(0)
+for (i in 1:ncol(coursegrades.s303)) {
+  if(is.na(coursegrades.s303[,i]) |> sum()  > nrow(coursegrades.s303)*pct){
+    courses <- c(courses,i)
+  }
+}
+
+coursegrades.s303 <- coursegrades.s303[,-courses]
+student_columns <- colnames(coursegrades.s303)[c(1:2)]
+
+
+# Removing all course columns of higher years
+YOI <- as.integer(substr(strsplit(COI, split = ".", fixed = TRUE)[[1]][2],1,1))
+
+column_names <- colnames(coursegrades.s303)[6:length(colnames(coursegrades.s303))]
+
+# Extract digits after the period in column names
+column_digits <- as.integer(sub("^[^.]+\\.([0-9]).*", "\\1", column_names))
+
+# Find columns with digits not matching the selected course year
+cols_to_keep <- c(student_columns, column_names[column_digits <= YOI])
+
+# All columns in the same year or below
+coursegrades.s303 <- coursegrades.s303[, colnames(coursegrades.s303) %in% cols_to_keep]
+
+# display data to be used
+coursegrades.s303
 ```
 
 Here we used trainControl to perform a grid search on the hyperparameters of the GBM algorithm. The main parameters are: n.trees - The number of iterations (decision trees built). interaction.depth - The maximum depth of decision trees. shrinkage - Learning rate (lower rate means it learns less per iteration), if this is too small the model is prone to overfitting. n.minobsinnode - minimum number of observations in terminal nodes. From this we found out a shrinkage of 0.001 or 0.01 is best, a interaction depth of 3-4 is best, the number of trees doesn't matter as we find the optimal # anyways, and n.minobsinnode doesn't have a large impact. Also, train.fraction and bag.fraction of 0.5 are best to ensure some randomness in the model.
@@ -2634,23 +2727,47 @@ gbmGrid <-  expand.grid(
 
 # training a Gboost Regression tree model while tuning parameters
 # saving results into rdata files
-stat230.model = train(STAT.230~., data = coursegrades, method = "gbm", trControl = train_control, tuneGrid = gbmGrid, na.action = na.pass)
-save(stat230.model, file = "stat230model.RDATA")
-rm(stat230.model)
-cosc221.model = train(COSC.221~., data = coursegrades.c221, method = "gbm", trControl = train_control, tuneGrid = gbmGrid, na.action = na.pass)
-save(cosc221.model, file = "cosc221model.RDATA")
-rm(cosc221.model)
-data311.model = train(DATA.311~., data = coursegrades.d311, method = "gbm", trControl = train_control, tuneGrid = gbmGrid, na.action = na.pass)
-save(data311.model, file = "data311model.RDATA")
-rm(data311.model)
-data301.model = train(DATA.301~., data = coursegrades.d301, method = "gbm", trControl = train_control, tuneGrid = gbmGrid, na.action = na.pass)
-save(data301.model, file = "data301model.RDATA")
-rm(data301.model)
+# stat230.model = train(STAT.230~., data = coursegrades, method = "gbm", trControl = train_control, tuneGrid = gbmGrid, na.action = na.pass)
+# save(stat230.model, file = "stat230model.RDATA")
+# rm(stat230.model)
+# cosc221.model = train(COSC.221~., data = coursegrades.c221, method = "gbm", trControl = train_control, tuneGrid = gbmGrid, na.action = na.pass)
+# save(cosc221.model, file = "cosc221model.RDATA")
+# rm(cosc221.model)
+# data311.model = train(DATA.311~., data = coursegrades.d311, method = "gbm", trControl = train_control, tuneGrid = gbmGrid, na.action = na.pass)
+# save(data311.model, file = "data311model.RDATA")
+# rm(data311.model)
+# data301.model = train(DATA.301~., data = coursegrades.d301, method = "gbm", trControl = train_control, tuneGrid = gbmGrid, na.action = na.pass)
+# save(data301.model, file = "data301model.RDATA")
+# rm(data301.model)
 
 
+math221.model = train(MATH.221~., data = coursegrades.m221, method = "gbm", trControl = train_control, tuneGrid = gbmGrid, na.action = na.pass)
+save(math221.model, file = "math221model.RDATA")
+stat303.model = train(STAT.303~., data = coursegrades.s303, method = "gbm", trControl = train_control, tuneGrid = gbmGrid, na.action = na.pass)
+save(stat303.model, file = "stat303model.RDATA")
+
+load("stat230model.RDATA")
+load("cosc221model.RDATA")
+load("data311model.RDATA")
+load("data301model.RDATA")
+load("math221model.RDATA")
+load("stat303model.RDATA")
 
 # summarising the results
 print(stat230.model$results)
+print(cosc221.model$results)
+print(data311.model$results)
+print(data301.model$results)
+print(math221.model$results)
+print(stat303.model$results)
+
+
+stat230.model$results[order(stat230.model$results[,"RMSE"]),]
+cosc221.model$results[order(cosc221.model$results[,"RMSE"]),]
+data311.model$results[order(data311.model$results[,"RMSE"]),]
+data301.model$results[order(data301.model$results[,"RMSE"]),]
+math221.model$results[order(math221.model$results[,"RMSE"]),]
+stat303.model$results[order(stat303.model$results[,"RMSE"]),]
 
 # Make predictions on new data
 # predictions <- predict(model$bestTune, newdata = coursegrades[test_indices,], n.trees = ntrees)
