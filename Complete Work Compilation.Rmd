@@ -640,8 +640,28 @@ head(studentgrades_prof_new)
 load(file="Prof_StudentGrades_old.RData")
 head(studentgrades_prof[,c(1:10,910:915)])
 ```
+```{r}
+rel_course_profs
+```
 
 
+### Adding professors to the original dataset
+```{r}
+df_clean$Professor = character(nrow(df_clean))
+
+for(i in 1:nrow(df_clean)){
+  for(j in 1:nrow(rel_course_profs)){
+    if((df_clean$YEAR_CODE[i] == rel_course_profs$year_code[j]) & (df_clean$COURSE_CODE[i] == rel_course_profs$course_name[j]) & (df_clean$SEC_NO[i] == rel_course_profs$Section[j])){
+      df_clean$Professor[i] = rel_course_profs$Professor[j]
+    }
+  }
+  
+}
+
+df_clean
+
+write.csv(df_clean, file = "../UBCO-Grade-Prediction-data/student-data-profs.csv")
+```
 
 
 
