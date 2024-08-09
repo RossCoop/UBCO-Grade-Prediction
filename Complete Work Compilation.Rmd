@@ -664,6 +664,37 @@ write.csv(df_clean, file = "../UBCO-Grade-Prediction-data/student-data-profs.csv
 ```
 
 
+```{r Making factored dataset, eval=FALSE}
+df <- read.csv("../UBCO-Grade-Prediction-data/student-data-profs.csv")
+df <- df[,-1]
+df <- na.omit(df)
+
+
+# Convert each column to factors and create reference tables
+factor_columns <- lapply(df, function(column) {
+  if(is.character(column)) {
+    factor_column <- factor(column)
+    reference_table <- data.frame(
+      original_value = levels(factor_column),
+      factor_number = seq_along(levels(factor_column))
+    )
+    print(reference_table) # Display the reference table
+    return(as.integer(factor_column))
+  } else {
+    return(column)
+  }
+})
+
+# Combine the factored columns into a new data frame
+df_factored <- as.data.frame(factor_columns)
+
+df_factored <- df_factored[order(df_factored$YEAR_CODE),]
+
+# Output the new factored dataframe
+print(df_factored)
+
+# write.csv(df_factored, file = "../UBCO-Grade-Prediction-data/student-data-profs-factored.csv")
+```
 
 
 # Analysis and Prediction
