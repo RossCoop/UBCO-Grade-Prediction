@@ -6,12 +6,30 @@ output: html_document
 ---
 
 
+# Loading Packages
+
+```{r loading all libraries used, eval=TRUE, echo=FALSE}
+# does not necessarily include library calls in chunks not used in knitting process
+library(dplyr)
+library(knitr)
+library(missForest)
+library(randomForest)
+library(gbm)
+library(recosystem)
+library(e1071)
+library(kernlab)
+library(caret)
+library(tidyverse)
+library(ggplot2)
+```
+
+
 # Data Cleaning and Processing
 
 ## Student grades data cleaning
 
 The first thing we do is read in the student grades from the csv given. After that we trim the whitespace for all character columns to ensure there are no irregularities. A course code column is created to put a course with it's course number in the form COURSE.NUMBER.
-```{r reading in student-data, eval = FALSE}
+```{r reading in student-data, eval = FALSE, echo=FALSE}
 ## this chunk is used to read in student grades data from student-data.csv
 ## and cleans the data to be used
 # df <- read.csv("..\\UBCO-Grade-Prediction-data\\student-data.csv")
@@ -56,7 +74,7 @@ df_clean <- df_clean[,-(12:13)]
 df_clean <- df_clean[, -(20)]
 
 # Changing course detail, gender, res, and citizenship from "" to NA
-library(dplyr)
+
 df_clean <- df_clean %>%
   mutate(RESIDENCY = na_if(RESIDENCY, ""))
 df_clean <- df_clean %>%
@@ -90,14 +108,14 @@ head(df_clean)
 # save(df_clean, file = "student-data.RData")
 ```
 
-The student grades data has not fundamentally changed. 
-```{r loading cleaned student-data, eval=TRUE}
+The student grades data has not fundamentally changed.
+```{r loading cleaned student-data, eval=TRUE, echo=FALSE}
 load("student-data.RData")
 head(df_clean)
 ```
 
 This chunks' main purpose is to make a table summing the number of times each course is taken. This also identifies the "Relevant Courses" as df_bsc_relevant_courses. Outputs the number of unique courses found after cleaning the data.
-```{r finding number of times courses were taken, eval=TRUE}
+```{r finding number of times courses were taken, eval=TRUE, echo=FALSE}
 # Determining how many courses there are (taken by at least 1 student)
 unique(df_clean$COURSE_CODE)|>length()
 
@@ -126,7 +144,7 @@ uniqueids <- unique(df_bsc_relevant_courses$STUD_NO_ANONYMOUS)
 ```
 
 This chunk was used to determine the maximum number of times each course was taken. With the number of times a course was taken, we can make enough columns for each students' retaken course grade without issue.
-```{r counting course retake occurences, eval=FALSE}
+```{r counting course retake occurences, eval=FALSE, echo=FALSE}
 # finding student who've taken a course more than once
 duplicate_rows <- df_bsc_relevant_courses[duplicated(df_bsc_relevant_courses[c("STUD_NO_ANONYMOUS", "COURSE_CODE")]) | duplicated(df_bsc_relevant_courses[c("STUD_NO_ANONYMOUS", "COURSE_CODE")], fromLast = TRUE), ]
 # duplicate_rows[c(1,15,12,13)]
@@ -142,7 +160,7 @@ max_course_counts_df <- data.frame(COURSE_CODE = names(max_repeats), max_repeats
 ```
 
 Here we create those columns header names to be able to create a empty data frame to fill.
-```{r creating list of course column names .1 .2, eval=FALSE}
+```{r creating list of course column names .1 .2, eval=FALSE, echo=FALSE}
 # Creating a new list of course column names
 ## eg. Math.101.1, Math.101.2...
 
@@ -166,13 +184,10 @@ course_names_dups <- append(non_rep_courses, rep_courses)
 
 ### Extracting student majors and minors
 This chunk is used to find each students' major(s), minor, and whether they are taking honors. They are saved in a data frame with each student on a new row. This data frame is later fed into the studentgrades data frame including all student grades. This chunk will be run for any of the three types of students grade structure used.
-```{r finding student majors and minors, eval=FALSE}
+```{r finding student majors and minors, eval=FALSE, echo=FALSE}
 # Finding student majors and minors
 ### WARNING: no 2023 data yet which may contain updates to major/minors
 
-
-# looking through/ getting last row of each student
-library(dplyr)
 
 # Assuming your dataframe is called 'df'
 
@@ -245,10 +260,7 @@ head(student_mm)
 ```
 
 ### Extracting gender, citizenship, and residency
-```{r extracting gender, citizenship, and residency from new student rows, eval=FALSE}
-# Loading packages
-library(dplyr)
-
+```{r extracting gender, citizenship, and residency from new student rows, eval=FALSE, echo=FALSE}
 
 # getting only rows with values for the gender, etc. columns
 rel_rows <- df_bsc_relevant_courses[!is.na(df_bsc_relevant_courses$GENDER) & !is.na(df_bsc_relevant_courses$RESIDENCY) & !is.na(df_bsc_relevant_courses$CITIZENSHIP),]
@@ -275,15 +287,13 @@ student_details <- left_join(student_mm, student_gcr, by = "StudentID")
 This variation of studentgrades has each student represented as rows, and courses as columns. Course grades are recorded for each attempt a student takes at each course. Each new attempt is saved in a new column with all 3rd time attemps of MATH.101 being saved in MATH.101.3. For example, MATH 101 has 3 columns: MATH.101.1, MATH.101.2, MATH.101.3. One for each new attempt at MATH 101.
 
 Here we create an empty data frame, add in the unique student ids and their matching majors and minors. After we loop through df_bsc_relevant_courses to add in grades to their respective student and course column.
-```{r Making studentgrades with .1 .2 etc, eval=FALSE}
+```{r Making studentgrades with .1 .2 etc, eval=FALSE, echo=FALSE}
 # Making the Data Frame
  ## Columns to add: Student ID, Major, Honors, Minor, Extras, 200 most common courses
 
 # Building df after getting the data
 
 studentgrades <- data.frame(Student_ID = sort(uniqueids))
-
-
 
 
 # Create a data frame with NA values and course column names
@@ -314,9 +324,9 @@ studentgrades[,c("Student_ID","MATH.101.1","MATH.101.2")]
 
 ```
 
-```{r loading studentgrades with .1 .2, eval=TRUE}
+```{r loading studentgrades with .1 .2, eval=TRUE, echo=FALSE}
 load(file = "studentgrades_1.RData")
-head(studentgrades_rep[,c(1:15)])
+kable(studentgrades_rep[c(1:5),c(1:5,810:815)])
 ```
 
 
@@ -326,7 +336,7 @@ head(studentgrades_rep[,c(1:15)])
 This variation of studentgrades has each student represented as rows, and courses as columns. Only the most recent attempt at each course is recorded. For example, MATH 101 has only one column: MATH.101.
 
 To do that we only create one column per course and save the most recent grade into correct student row and course column. This will overwrite existing grades if a student has retaken a course.
-```{r Making studentgrades using most recent grade, eval=FALSE}
+```{r Making studentgrades using most recent grade, eval=FALSE, echo=FALSE}
 studentgrades <- data.frame(Student_ID = sort(uniqueids))
 
 # Create a data frame with NA values and course column names
@@ -351,16 +361,16 @@ studentgrades
 # save(studentgrades, file="StudentGrades.RData")
 ```
 
-```{r loading studentgrades with new student data, eval=TRUE}
+```{r loading studentgrades with new student data, eval=TRUE, echo=FALSE}
 load("StudentGrades.RData")
 studentgrades_new = studentgrades
-head(studentgrades_new[,c(1:15)])
+kable(studentgrades_new[c(1:5),c(1:10)])
 ```
 
 
-```{r loading studentgrades using most recent grade, eval=TRUE}
+```{r loading studentgrades using most recent grade, eval=TRUE, echo=FALSE}
 load("StudentGrades_old.RData")
-head(studentgrades[,c(1:15)])
+kable(studentgrades[c(1:5),c(1:10)])
 ```
 
 
@@ -368,7 +378,7 @@ head(studentgrades[,c(1:15)])
 ## Using Professor data
 ### Cleaning process
 Since all professors for each course are saved in individual csvs by subject and term we need to compile all professor data into one data frame. We save the resulting into a rdata file.
-```{r compiling prof csv data, eval=FALSE}
+```{r compiling prof csv data, eval=FALSE, echo=FALSE}
 # getting all file names in UBCO-Profs folder
 file_names <- dir(path = "UBCO-Profs")
 
@@ -401,7 +411,7 @@ save(course_profs, file = "course_profs.RData")
 ```
 
 However, this data is messy and has several names in the professor column. My assumption is that TAs and co professors are added to the list along with the main professor. This chunk is used in the cleaning process and finds out how many times each unique professor name appears in the data frame.
-```{r adjusting prof data table, eval=FALSE}
+```{r adjusting prof data table, eval=FALSE, echo=FALSE}
 # all unique 'professor' names
 prof_names_full_data <- course_profs$Professor
 # length
@@ -432,7 +442,7 @@ ordered_profs <- sort(prof_table, decreasing = TRUE)
 We need to reduce the number of names in each column to only a single name in order to standardize and factor professors. While rudimentary, the one name we take is the name which has appeared the most times in the entire data frame. The logic behind this is that the names with the most occurrences over the years will be professors as opposed to students who TA for 2 years. We don't count only names which are by themselves (no TAs etc.) to find professors with for one reason. Many subjects only list professors with their TAs resulting in many professors being excluded from the table which counts name occurrences. This messes with the professor of many courses as no professor is found in the name occurrences table.
 
 Yes there are better solutions, however as a test to see if professor data would improve the model, this is the algorithm I chose. We could change this to save multiple professors if both appear on their own. One problem I foresee with this is when the main prof never appears on their own, but the co prof does resulting in only the co professor being saved.
-```{r making table of courses and their professors, eval=FALSE}
+```{r making table of courses and their professors, eval=FALSE, echo=FALSE}
 # making a new table to join on (to student grades)
 rel_course_profs <- course_profs
 ordered_prof_names <- rownames(ordered_profs)
@@ -462,7 +472,7 @@ for(r in 1:nrow(rel_course_profs)){
 save(rel_course_profs, file = "cleaned_profs.RData")
 ```
 
-```{r loading professor cleaning and final data, eval=FALSE}
+```{r loading professor cleaning and final data, eval=TRUE, echo=FALSE}
 # course_profs
 load("course_profs.RData")
 # rel_course_profs
@@ -474,7 +484,7 @@ The data frame rel_course_profs contains rows containing the Professor, Year, Co
 
 ### Professor-student data structure
 This was a temporary chunk used to create a data frame to test the model with. courses was saved to a short list of 8 courses which was used to initially test with GBMs
-```{r adding profs to studentgrades *OLD*, eval=FALSE}
+```{r adding profs to studentgrades *OLD*, eval=FALSE, echo=FALSE}
 courses <- unique(rel_course_profs$course_name)
 courses <- colnames(studentgrades[,colnames(studentgrades) %in% courses])
 
@@ -549,7 +559,7 @@ studentgrades_prof[,880:890]
 This chunk is used to make a new studentgrades_prof data frame with both courses and their respective professors as columns. By looping through each row in df_bsc_relevant_columns, the relevant data is added to studentgrades_prof.
 
 The data frame studentgrades_prof is similar to studentgrades (most recent grades version) in that students grades are saved as rows, and each columns is a different course. Additionally, there are columns which contain the professors who taught each course there is a grade for. For example, Student X has a grade in the MATH.101 column and will therefore have a professor in the MATH.101.P column. Student Y who has not taken MATH 101 will not have a grade in MATH.101, nor a professor in MATH.101.P.
-```{r creating studentgrades_prof, eval=FALSE}
+```{r creating studentgrades_prof, eval=FALSE, echo=FALSE}
 # creating all columns to be used in studentgrades_prof
 # course_names from 'finding number of times courses were taken' chunk
 courseprof_cols <- c(course_names, paste0(course_names,".P"))
@@ -630,23 +640,25 @@ for(i in (prof_column_adjust+6):ncol(studentgrades_prof)){
 save(studentgrades_prof, file="Prof_StudentGrades.RData")
 ```
 
-```{r loading studentgrades_prof using new student data, eval=TRUE}
+```{r loading studentgrades_prof using new student data, eval=TRUE, echo=FALSE}
 load(file="Prof_StudentGrades.RData")
 studentgrades_prof_new = studentgrades_prof
-head(studentgrades_prof_new)
+kable(studentgrades_prof_new[1:5,1:12])
 ```
 
-```{r loading studentgrades_prof, eval=TRUE}
+```{r loading studentgrades_prof, eval=TRUE, echo=FALSE}
 load(file="Prof_StudentGrades_old.RData")
 head(studentgrades_prof[,c(1:10,910:915)])
 ```
-```{r}
-rel_course_profs
+
+Table of courses and the professors which taught them.
+```{r showing prof list, eval=TRUE, echo=FALSE}
+kable(rel_course_profs[1:10,])
 ```
 
 
 ### Adding professors to the original dataset
-```{r}
+```{r creating original dataset with professors, eval=FALSE, echo=FALSE}
 df_clean$Professor = character(nrow(df_clean))
 
 for(i in 1:nrow(df_clean)){
@@ -664,7 +676,7 @@ write.csv(df_clean, file = "../UBCO-Grade-Prediction-data/student-data-profs.csv
 ```
 
 
-```{r Making factored dataset, eval=FALSE}
+```{r Making factored dataset, eval=FALSE, echo=FALSE}
 df <- read.csv("../UBCO-Grade-Prediction-data/student-data-profs.csv")
 df <- df[,-1]
 df <- na.omit(df)
@@ -695,7 +707,8 @@ print(df_factored)
 
 # write.csv(df_factored, file = "../UBCO-Grade-Prediction-data/student-data-profs-factored.csv")
 ```
-```{r}
+
+```{r showing factored dataset, eval=FALSE, echo=FALSE}
 # courses_factored <- numeric(0)
 # courses_factored$num <- seq_along(levels(factor(df$COURSE_CODE)))
 # courses_factored$course <- levels(factor(df$COURSE_CODE))
@@ -710,7 +723,7 @@ courses_factored[courses_factored$course == "STAT.230",]
 Throughout my time on this project I have switched which data frame I used to train and test each model and method. The three data frames are described above but are called studentgrades_rep, studentgrades, and studentgrades_prof respectively. For some of the main methods using 'old' data frames I will use other data frames for comparison.
 
 Here I set up a data frame to save all model rmses
-```{r}
+```{r setting up rmse dataframe, eval=TRUE, echo=FALSE}
 all_model_rmse <- data.frame(rmse = numeric(0), detail = character(0))
 ```
 
@@ -718,7 +731,7 @@ all_model_rmse <- data.frame(rmse = numeric(0), detail = character(0))
 ## Initial EDA
 
 These are the first plots I made in order to get a feel for the data. They do not show much insight into the data.
-```{r plot of MATH.100.1 against MATH.100.2,eval=FALSE}
+```{r plot of MATH.100.1 against MATH.100.2,eval=TRUE, echo=FALSE}
 # Big ol graph of student grades
 maths <- studentgrades_rep[complete.cases(studentgrades_rep$MATH.100.1, studentgrades_rep$MATH.100.2), ]
 
@@ -732,7 +745,7 @@ abline(maths.lm)
 ## weird....
 ```
 
-```{r plot of MATH.100.1 against STAT.230.1, eval=FALSE}
+```{r plot of MATH.100.1 against STAT.230.1, eval=TRUE, echo=FALSE}
 mathstat <- studentgrades_rep[complete.cases(studentgrades_rep$MATH.100.1, studentgrades_rep$STAT.230.1), ]
 
 mathstat.lm <- lm(mathstat$MATH.100.1~ mathstat$STAT.230.1)
@@ -747,7 +760,7 @@ abline(mathstat.lm)
 ## want to check on people who only had to take it once...
 ```
 
-```{r plot of MATH.100.1 against PSYO.111.1, eval=FALSE}
+```{r plot of MATH.100.1 against PSYO.111.1, eval=FALSE, echo=FALSE}
 edasubset <- studentgrades_rep[complete.cases(studentgrades_rep$MATH.100.1, studentgrades_rep$PSYO.111.1), ]
 
 edasubset.lm <- lm(edasubset$MATH.100.1~ edasubset$PSYO.111.1)
@@ -759,7 +772,7 @@ abline(edasubset.lm)
 ## ... makes sense that some courses like PSYO 111 are grade boosters
 ```
 
-```{r plot of MATH.100.2 against STAT.230.1, eval=FALSE}
+```{r plot of MATH.100.2 against STAT.230.1, eval=TRUE, echo=FALSE}
 mathstat2 <- studentgrades_rep[complete.cases(studentgrades_rep$MATH.100.2, studentgrades_rep$STAT.230.1), ]
 
 mathstat2.lm <- lm(mathstat2$MATH.100.2~ mathstat2$STAT.230.1)
@@ -769,7 +782,7 @@ plot(mathstat2$MATH.100.2, mathstat2$STAT.230.1)
 abline(mathstat2.lm)
 ```
 
-```{r plot of MATH.100.1 (no MATH.100.2 grade present) againt STAT.230.1, eval=FALSE}
+```{r plot of MATH.100.1 (no MATH.100.2 grade present) againt STAT.230.1, eval=TRUE, echo=FALSE}
 
 ## want to check on people who only had to take it once (aka no MATH.100.2 grade present)
 
@@ -783,8 +796,8 @@ abline(first.lm)
 # just removed the 'low' grades (p much all fails) 
 ```
 
-This chunk uses studentgrades_rep and makes a data frame including each course and its average grade. Doesn't quite work right now...
-```{r finding average grades for each course, eval=FALSE}
+This chunk uses studentgrades_rep and makes a data frame including each course and its average grade.
+```{r finding average grades for each course, eval=FALSE, echo=FALSE}
 # want the average grade for each course... bar plot
 course_averages <- data.frame(Courses = course_names_dups, Average = rep(NA, length(course_names_dups)))
 
@@ -797,26 +810,31 @@ barplot(course_averages$Average, names.arg = course_averages$Courses)
 
 # average grades for each course
 head(course_averages)
+
+## doesnt work atm.
 ```
 
 This chunk uses studentgrades_rep to make a pairplot of MATH.100.1, MATH.101.1, STAT.230.1, DATA.101.1.
-```{r pairplot of MATH.100.1, MATH.101.1, STAT.230.1, DATA.101.1, eval=FALSE}
+```{r pairplot of MATH.100.1, MATH.101.1, STAT.230.1, DATA.101.1, eval=TRUE, echo=FALSE}
 # pairplot using data which has no missing grades from these courses
 plot(studentgrades_rep[!is.na(studentgrades_rep$MATH.100.1)&!is.na(studentgrades_rep$MATH.101.1)&!is.na(studentgrades_rep$STAT.230.1)&!is.na(studentgrades_rep$DATA.101.1),c("Student_ID","MATH.100.1","MATH.101.1","STAT.230.1","DATA.101.1")])
+```
 
+This is the same pairplot as above using only students who have taken STAT 230.
+```{r, echo=FALSE, eval=TRUE}
 # studentgrades data which has no missing STAT.230 grades
-studentgrades_rep[!is.na(studentgrades_rep$STAT.230.1),c("Student_ID","MATH.100.1","MATH.101.1","DATA.101.1","STAT.230.1")]
+# studentgrades_rep[!is.na(studentgrades_rep$STAT.230.1),c("Student_ID","MATH.100.1","MATH.101.1","DATA.101.1","STAT.230.1")]
 
 # pairplot using data which has no missing STAT.230 grades
 plot(studentgrades_rep[!is.na(studentgrades_rep$STAT.230.1),c("Student_ID","MATH.100.1","MATH.101.1","DATA.101.1","STAT.230.1")])
 ```
 
-```{r plot of MATH.100.1 against MATH.101.1, eval=FALSE}
+```{r plot of MATH.100.1 against MATH.101.1, eval=TRUE, echo=FALSE}
 plot(studentgrades_rep[!is.na(studentgrades_rep$MATH.100.1)&!is.na(studentgrades_rep$MATH.101.1),c("MATH.100.1","MATH.101.1")])
 ```
 
 This chunk returns the number of times a course has been taken by students WHO HAVE ALL TAKEN stat 230. Used to view variables which may be useful. This code is used in a later chunk.
-```{r number of times courses have been taken by those who have taked STAT 230, eval=FALSE}
+```{r number of times courses have been taken by those who have taked STAT 230, eval=FALSE, echo=FALSE}
 # returns the number of times a course has been taken by students WHO HAVE ALL TAKEN stat 230
 ids <- unique(df_bsc_relevant_courses[df_bsc_relevant_courses$COURSE_CODE=="STAT.230",]$STUD_NO_ANONYMOUS)
 courses <- unique(df_bsc_relevant_courses[df_bsc_relevant_courses$STUD_NO_ANONYMOUS %in% ids,]$COURSE_CODE)
@@ -841,7 +859,7 @@ length(sorted_courses_taken_bsc[sorted_courses_taken_bsc >= N])
 ```
 
 This is an oversimplified linear regression on STAT.230 using pre requisite courses. Oversimplified meaning we take COSC.221 and MATH.101 as the pre reqs when in reality they are: One of MATH 101, MATH 103, MATH 142 and one of DATA 101, COSC 221.
-```{r linear regression on stat.230 prerequisites, eval=TRUE}
+```{r linear regression on stat.230 prerequisites, eval=TRUE, echo=FALSE}
 rel_grades <- studentgrades[complete.cases(studentgrades$STAT.230, studentgrades$COSC.221, studentgrades$MATH.101), ]
 
 set.seed(5934)
@@ -865,15 +883,13 @@ all_model_rmse <- rbind(all_model_rmse, c(rmse, "Linear Regression on Prerequisi
 These first attempts were made on either studentgrades_rep or studentgrades. Attempts made using studentgrades_prof were added in after for comparison.
 
 ### MissForest
-The MissForest package is used to impute missing data. After using it to impute NA's into student grades, we can use the imputed data set with other models which don't allow for missing data/NAs. One of this packages use cases was imputing the data and using it in a Random Forest model. Since imputation is computationally expensive, we only impute on a small number of courses.
+The MissForest package is used to impute missing data. After using it to impute NA's into student grades, we can use the imputed data set with other models which don't allow for missing data/NAs. One of this packages use cases was imputing the data and using it in a Random Forest model. Since imputation is computationally expensive, we only impute on a small number of courses. Unfortunately, due to the way in which I implemented this model into others there was some leaked information resulting in misleading rmse values. 
 This chunk uses studentgrades_rep and only uses each selected courses first attempt to impute and predict.
-```{r missForest Impute into RF on course first attempts, eval=TRUE, warning=FALSE}
+```{r missForest Impute into RF on course first attempts, eval=FALSE, warning=FALSE, echo=FALSE}
 # preparing all student grades with stat230
 stat230grades <- studentgrades_rep[!is.na(studentgrades_rep$STAT.230.1),c("Student_ID","MATH.100.1","MATH.101.1","STAT.230.1","MATH.200.1","MATH.221.1","COSC.211.1","COSC.222.1","COSC.221.1")]
 head(stat230grades)
 
-library(missForest)
-library(randomForest)
 
 n_rows <- nrow(stat230grades)
 set.seed(5934)
@@ -895,14 +911,12 @@ all_model_rmse <- rbind(all_model_rmse, c(rmse, "MissForest imputation into Rand
 ```
 
 This chunk uses studentgrades with the same few selected courses. While this is one very good result I have tested on a few other seeds and it generally performs quite well. With some CV or other methods this could work well.
-```{r missForest Impute into RF using few courses (stats maths cosc), eval=TRUE}
+```{r missForest Impute into RF using few courses (stats maths cosc), eval=FALSE, echo=FALSE}
 
 # preparing all student grades with stat230
 stat230grades <- studentgrades[!is.na(studentgrades$STAT.230),c("Student_ID","STAT.230","MATH.100","MATH.101","MATH.200","MATH.221","COSC.211","COSC.222","COSC.221")]
 # stat230grades
 
-library(missForest)
-library(randomForest)
 
 n_rows <- nrow(stat230grades)
 
@@ -951,14 +965,12 @@ qqnorm(residuals, main = "Normal Q-Q Plot of Residuals")
 qqline(residuals, col = "red")
 ```
 
-```{r missForest Impute into RF using few courses (stats maths cosc), eval=TRUE}
+```{r missForest Impute into RF data leak test, eval=FALSE, echo=FALSE}
 
 # preparing all student grades with stat230
 stat230grades <- studentgrades[!is.na(studentgrades$STAT.230),c("Student_ID","STAT.230","MATH.100","MATH.101","MATH.200","MATH.221","COSC.211","COSC.222","COSC.221")]
 # stat230grades
 
-library(missForest)
-library(randomForest)
 
 n_rows <- nrow(stat230grades)
 
@@ -1012,14 +1024,12 @@ qqline(residuals, col = "red")
 
 
 In this chunk I wanted to try a method that worked before with the new studentgrades_prof data. As we can see it still works even when imputing professor data.
-```{r missForest Impute into RF on studentgrades_prof, eval=TRUE}
+```{r missForest Impute into RF on studentgrades_prof, eval=FALSE, echo=FALSE}
 set.seed(5934)
 # preparing all student grades with stat230
 stat230grades <- studentgrades_prof[!is.na(studentgrades_prof$STAT.230),c("MATH.100","MATH.101","STAT.230","MATH.200","MATH.221","COSC.211","COSC.222","COSC.221","MATH.100.P","MATH.101.P","STAT.230.P","MATH.200.P","MATH.221.P","COSC.211.P","COSC.222.P","COSC.221.P")]
 # stat230grades
 
-library(missForest)
-library(randomForest)
 
 n_rows <- nrow(stat230grades)
 
@@ -1055,7 +1065,7 @@ abline(line.lm, col = "green")
 ```
 
 
-```{r missForest Impute into RF on all studentgrades_prof courses, eval=TRUE}
+```{r missForest Impute into RF on all studentgrades_prof courses, eval=FALSE, echo=FALSE}
 
 # Identifying the course of interest
 COI <- "STAT.230"
@@ -1104,8 +1114,6 @@ coursegrades <- coursegrades[, colnames(coursegrades) %in% cols_to_keep]
 
 head(coursegrades)
 
-library(missForest)
-library(randomForest)
 
 n_rows <- nrow(coursegrades)
 set.seed(5934)
@@ -1142,14 +1150,12 @@ abline(line.lm, col = "green")
 
 
 In this chunk I cut right to the chase and use the imputed values as grade predictions. As expected it doesn't work very well.
-```{r Using missForest for prediction, eval=TRUE}
+```{r Using missForest for prediction, eval=TRUE, echo=FALSE}
 set.seed(5934)
 # preparing all student grades with stat230
 stat230grades <- studentgrades[!is.na(studentgrades$STAT.230),c("MATH.100","MATH.101","STAT.230","MATH.200","MATH.221","COSC.211","COSC.222","COSC.221")]
 # stat230grades
 
-library(missForest)
-library(randomForest)
 
 n_rows <- nrow(stat230grades)
 
@@ -1176,7 +1182,7 @@ all_model_rmse <- rbind(all_model_rmse, c(rmse, "MissForest imputation as predic
 In this section I've added the other ways I implemented random forests since many attempts were included above since missForest was used in order to keep as many rows as possible.
 
 In this chunk I take the complete cases of MATH.100.1, MATH.101.1, STAT.230.1, and DATA.101.1 to train a RF model and predict STAT 230 grades. Note that this is using studentgrades_rep.
-```{r RF on all non-NA data, eval=TRUE}
+```{r RF on all non-NA data, eval=TRUE, echo=FALSE}
 # getting all students with grades in all courses
 stat230grades.full <- studentgrades_rep[!is.na(studentgrades_rep$MATH.100.1)&!is.na(studentgrades_rep$MATH.101.1)&!is.na(studentgrades_rep$STAT.230.1)&!is.na(studentgrades_rep$DATA.101.1),c("Student_ID","MATH.100.1","MATH.101.1","STAT.230.1","DATA.101.1")]
 
@@ -1186,7 +1192,6 @@ set.seed(5934)
 train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
 test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
 
-library(randomForest)
 
 stat230.rf <- randomForest(STAT.230.1~., data=stat230grades.full[train_indices,2:5] )
 stat230.pred <- predict(stat230.rf, newdata = stat230grades.full[test_indices,2:5])
@@ -1202,13 +1207,12 @@ all_model_rmse <- rbind(all_model_rmse, c(rmse, "Random Forest on non-NA data (s
 ```
 
 This chunk is a repeat of the previous one, except using studentgrades. Neither seem to produce decent predictions, however, I believe there is not enough data to make a good model.
-```{r RF on complete data, eval=TRUE, warning=FALSE}
+```{r RF on complete data, eval=TRUE, warning=FALSE, echo=FALSE}
 # this chunk uses a random forest model trained on the complete set of STAT 230, MATH 101, and COSC.221 (aka no NAs between them)
 coursegrades <- studentgrades[!is.na(studentgrades$STAT.230)&!is.na(studentgrades$MATH.101)&!is.na(studentgrades$MATH.100)&!is.na(studentgrades$DATA.101),c("STAT.230","MATH.101","MATH.100","DATA.101")]
 
 set.seed(5934)
 
-library(randomForest)
 
 n_rows <- nrow(coursegrades)
 
@@ -1227,8 +1231,8 @@ rmse <- sqrt(mean((stat230.pred - stat230.real)^2))
 all_model_rmse <- rbind(all_model_rmse, c(rmse, "Random Forest on non-NA data (studentgrades)"))
 ```
 
-This chunk implements missForest and Random Forests to predict grades. However, only courses which have been taken a certain number of times (times_taken = 190) are used as predictors during imputation, training, and testing. This is a rudimentary variable selection method but ensures we use predictors with the most existing data.
-```{r missForest Impute into RF on all courses taken x times, eval=TRUE}
+This chunk implements missForest and Random Forests to predict grades. However, only courses which have been taken a certain number of times (times_taken = 190) are used as predictors during imputation, training, and testing. This is a rudimentary variable selection method but ensures we use predictors with the most existing data. Leaks data unfortunately.
+```{r missForest Impute into RF on all courses taken x times, eval=FALSE, echo=FALSE}
 # returns the number of times a course has been taken by students who have also taken stat 230
 ids <- unique(df_bsc_relevant_courses[df_bsc_relevant_courses$COURSE_CODE=="STAT.230",]$STUD_NO_ANONYMOUS)
 courses <- unique(df_bsc_relevant_courses[df_bsc_relevant_courses$STUD_NO_ANONYMOUS %in% ids,]$COURSE_CODE)
@@ -1259,8 +1263,6 @@ course_names <- dimnames(course_names)[[1]]
 coursegrades <- studentgrades[!is.na(studentgrades$STAT.230),colnames(studentgrades) %in% course_names]
 head(coursegrades)
 
-library(missForest)
-library(randomForest)
 
 set.seed(5934)
 n_rows <- nrow(coursegrades)
@@ -1283,7 +1285,7 @@ all_model_rmse <- rbind(all_model_rmse, c(rmse, "MissForest imputation into Rand
 ```
 
 This is a repeat of the last chunk with modifications which make it easier to use different courses as the course we predict for.
-```{r missForest Impute into RF on all courses *USED FOR TESTING ON DIFF COURSES* (COSC.221), eval=FALSE}
+```{r missForest Impute into RF on all courses *USED FOR TESTING ON DIFF COURSES* (COSC.221), eval=FALSE, echo=FALSE}
 # returns the number of times a course has been taken by students who have also taken xxxx.xxx
 ids <- unique(df_bsc_relevant_courses[df_bsc_relevant_courses$COURSE_CODE=="COSC.221",]$STUD_NO_ANONYMOUS)
 courses <- unique(df_bsc_relevant_courses[df_bsc_relevant_courses$STUD_NO_ANONYMOUS %in% ids,]$COURSE_CODE)
@@ -1303,7 +1305,7 @@ course_names <- sorted_courses_taken_bsc[sorted_courses_taken_bsc >= times_taken
 
 
 
-set.seed(45)
+set.seed(5934)
 
 # of the same year and below
 # preparing all student grades with stat230
@@ -1316,8 +1318,6 @@ course_names <- dimnames(course_names)[[1]]
 stat230grades <- studentgrades[!is.na(studentgrades$COSC.221),colnames(studentgrades) %in% course_names]
 head(stat230grades)
 
-library(missForest)
-library(randomForest)
 
 n_rows <- nrow(stat230grades)
 
@@ -1341,7 +1341,7 @@ rmse
 
 ### Gradient Boosted Machines
 This section shows my initial attempts at gradient boosted machines. The first chunk uses studentgrades_rep to train and test on.
-```{r GBM on partial-NA data, eval=TRUE}
+```{r GBM on partial-NA data, eval=TRUE, echo=FALSE}
 # loading in data again
 stat230grades <- studentgrades_rep[!is.na(studentgrades_rep$STAT.230.1),c("Student_ID","COSC.221.1","MATH.101.1","DATA.101.1","STAT.230.1")]
 n_rows <- nrow(stat230grades)
@@ -1350,7 +1350,6 @@ set.seed(5934)
 train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
 test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
 
-library(gbm)
 
 gbm_params <- list(
   distribution = "gaussian",  # Specify the distribution for regression
@@ -1383,7 +1382,7 @@ all_model_rmse <- rbind(all_model_rmse, c(rmse, "Gradient Boosted Machines using
 ```
 
 This chunk uses the complete cases of COSC.221.1, MATH.101.1, STAT.230.1, and DATA.101.1 from studentgrades_rep to train and test. 
-```{r GBM on non-NA data, eval=TRUE}
+```{r GBM on non-NA data, eval=TRUE, echo=FALSE}
 # loading in data again TRYING WITH FULL DATA
 stat230grades <- studentgrades_rep[!is.na(studentgrades_rep$MATH.100.1)&!is.na(studentgrades_rep$MATH.101.1)&!is.na(studentgrades_rep$STAT.230.1)&!is.na(studentgrades_rep$DATA.101.1),c("Student_ID","COSC.221.1","MATH.101.1","STAT.230.1","DATA.101.1")]
 # stat230grades
@@ -1392,7 +1391,6 @@ set.seed(5934)
 train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
 test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
 
-library(gbm)
 
 gbm_params <- list(
   distribution = "gaussian",  # Specify the distribution for regression
@@ -1425,14 +1423,12 @@ all_model_rmse <- rbind(all_model_rmse, c(rmse, "Gradient Boosted Machines on co
 ```
 
 To cover all bases and check if it may be better, we impute grades onto the same courses and train a gbm model. The results are not great but quite a bit better than before.
-```{r missForest impute into GBM on studentgrades_rep 4 courses, eval=TRUE}
+```{r missForest impute into GBM on studentgrades_rep 4 courses, eval=TRUE, echo=FALSE}
 # now, does imputing the data before GBM work better?
 # preparing all student grades with stat230
 stat230grades <- studentgrades_rep[!is.na(studentgrades_rep$STAT.230.1),c("Student_ID","COSC.221.1","MATH.101.1","DATA.101.1","STAT.230.1")]
 # stat230grades
 
-library(missForest)
-library(gbm)
 
 n_rows <- nrow(stat230grades)
 set.seed(5934)
@@ -1473,14 +1469,12 @@ all_model_rmse <- rbind(all_model_rmse, c(rmse, "MissForest imputation into Rand
 ## 109 mse.. better still
 ```
 
-```{r missForest impute into GBM on studentgrades 4 courses, eval=TRUE}
+```{r missForest impute into GBM on studentgrades 4 courses, eval=TRUE, echo=FALSE}
 # now, does imputing the data before GBM work better?
 # preparing all student grades with stat230
 stat230grades <- studentgrades[!is.na(studentgrades$STAT.230),c("Student_ID","COSC.221","MATH.101","DATA.101","STAT.230")]
 # stat230grades
 
-library(missForest)
-library(gbm)
 
 n_rows <- nrow(stat230grades)
 set.seed(5934)
@@ -1520,7 +1514,7 @@ rmse <- sqrt(mean((predictions - stat230.imputed[test_indices,]$STAT.230)^2))
 all_model_rmse <- rbind(all_model_rmse, c(rmse, "MissForest imputation into Random Forest on 4 courses (studentgrades)"))
 ```
 
-```{r missForest impute into GBM on studentgrades all courses, eval=TRUE}
+```{r missForest impute into GBM on studentgrades all courses, eval=TRUE, echo=FALSE}
 # now, does imputing the data before GBM work better?
 
 # Identifying the course of interest
@@ -1569,10 +1563,6 @@ cols_to_keep <- c(student_columns, column_names[column_digits <= YOI])
 coursegrades <- coursegrades[, colnames(coursegrades) %in% cols_to_keep]
 
 
-
-library(missForest)
-library(gbm)
-
 n_rows <- nrow(coursegrades)
 set.seed(5934)
 train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
@@ -1612,7 +1602,7 @@ all_model_rmse <- rbind(all_model_rmse, c(rmse, "MissForest imputation into Rand
 ```
 
 This chunk will use students grades of the current year (eg. second year uses STAT.230 and COSC.221) to train the GBM model. However, the test set will have grades from the current year removed (eg. won't use COSC.221 as a predictor). In hindsight this isn't a great idea when using GBMs as the decision trees used won't be configured for the subset of courses used. Also to note, this uses studentgrades_rep.
-```{r, eval=FALSE}
+```{r, eval=FALSE, echo=FALSE}
 ## sets all courses of equal or higher level to NA before prediction, but after training the model
 set.seed(5934)
 # time to remove all future year courses from prediction
@@ -1665,8 +1655,6 @@ cols_to_na <- column_names[column_digits == YOI] #### ADD BACK COURSE OF INTERES
 cols_to_na <- cols_to_na[!cols_to_na == COI]
 coursegrades[test_indices, which(names(coursegrades) %in% cols_to_na)] <- NA
 
-library(gbm)
-
 gbm_params <- list(
   distribution = "gaussian",  # Specify the distribution for regression
   n.trees = 100,               # Number of trees (iterations)
@@ -1701,8 +1689,8 @@ rmse
 
 ### Matrix Factorization
 
-Since the studentgrades data frame is highly dimensional I wanted to see if matrix factorization would work well on this dataset. The results were decent, but no grid search was implemented to further improve this method.
-```{r Dataset creation for MF, eval=TRUE}
+Since the studentgrades data frame is highly dimensional I wanted to see if matrix factorization would work well on this dataset. The results were decent, and no grid search was implemented to further improve this method.
+```{r Dataset creation for MF, eval=TRUE, echo=FALSE}
 # Getting list of students wanted
 studs <- studentgrades[!is.na(studentgrades$STAT.230),]$Student_ID
 
@@ -1744,9 +1732,7 @@ data[] <- lapply(data, function(x) {
 obj_course <- data[1,2]
 ```
 
-```{r Matrix Factorization prediction, eval=TRUE}
-library(recosystem)
-
+```{r Matrix Factorization prediction, eval=TRUE, echo=FALSE}
 # Create a Reco object
 r <- Reco()
 
@@ -1779,7 +1765,7 @@ all_model_rmse <- rbind(all_model_rmse, c(rmse, "Matrix Factorization on the 199
 
 ### Structured Learning
 
-```{r Structured Learning, eval=FALSE}
+```{r Structured Learning, eval=FALSE, echo=FALSE}
 
 library(bnlearn)
 
@@ -1811,7 +1797,7 @@ mmpc$arcs[mmpc$arcs[,1]=="STAT.230"]
 
 ### Support Vector Machines
 Many research papers online have said they get one of the best prediction from SVMs so I figured I had to try it out. Using the base package e1071 support vector machines were implemented, however the predictions were not as good as we imagined.
-```{r SVM model, eval=FALSE}
+```{r SVM model, eval=FALSE, echo=FALSE}
 library(e1071)
 library(missForest)
 
@@ -1848,12 +1834,7 @@ rmse
 ```
 
 We figured that with traincontrol and some hyperparameter tuning we would get some better results. Fortunately we did get good results, including an rmse on par with GBMs. This was not initially tried with the professor data and may be worth revisiting.
-```{r SVM via trainControl, eval=TRUE}
-library(e1071)
-library(missForest)
-library(kernlab)  # install if necessary using 'install.packages'
-library(caret) # install if necessary using 'install.packages'
-
+```{r SVM via trainControl, eval=TRUE, echo=FALSE}
 course_names <- c("COSC.121","MATH.200","MATH.221","COSC.221","COSC.211","MATH.101","COSC.222","ECON.101","COSC.111","PSYO.111","STAT.230")
 
 grades <- studentgrades[!is.na(studentgrades$STAT.230),colnames(studentgrades) %in% course_names]
@@ -1886,7 +1867,6 @@ SVRFitCoarse
 
 ggplot(SVRFitCoarse)
 
-SVRFitCoarse$finalModel
 
 yPred <- predict(SVRFitCoarse$finalModel, xtest)
 
@@ -1896,12 +1876,10 @@ all_model_rmse <- rbind(all_model_rmse, c(rmse, "MissForest impute into Support 
 
 ### Recursive Feature Elimination
 This chunk was meant to be an attempt on using recursive feature elimination. However, this method doesn't work for data with NA values and couldn't be implemented with studentgrades.
-```{r Trying RFE... doesnt work on NA, eval=FALSE}
-library("dplyr")
+```{r Trying RFE... doesnt work on NA, eval=FALSE, echo=FALSE}
 library("faux")
 library("DataExplorer")
-library("caret")
-library("randomForest")
+
 
 studentgrades.factor <- studentgrades %>%
   # Save categorical features as factors
@@ -1945,13 +1923,13 @@ ggplot(data = result_rfe1, metric = "Kappa") + theme_bw()
 ### LASSO Feature Selection
 In this section there are two incomplete chunks of code. I had moved off of working on feature selection as we deemed GBMs were doing a good job at indicating which courses are the most important. 
 lasso regression doesn't handle NA values so I tried to avoid that by using na.action = na.exclude. However, that didn't work. Error: Every row has at least one missing value were found
-```{r LASSO feature selection, eval=FALSE}
+```{r LASSO feature selection, eval=FALSE, echo=FALSE}
 cv_5 <- trainControl(method="cv", number=5)
 studentgrades_stat230 <- studentgrades[!is.na(studentgrades$STAT.230),]
 lasso <- train(STAT.230 ~., data=studentgrades_stat230, method='lasso',  trControl=cv_5, na.action = na.exclude)
 ```
 
-```{r Lasso.., eval=FALSE}
+```{r Lasso.., eval=FALSE, echo=FALSE}
 library(glmnet)
 
 cv_model <- cv.glmnet(studentgrades$STAT.230~studentgrades[,-c(1,2,3,4,5,"STAT.230")], nfolds = 10,alpha=1)
@@ -1959,7 +1937,7 @@ cv_model <- cv.glmnet(studentgrades$STAT.230~studentgrades[,-c(1,2,3,4,5,"STAT.2
 
 ### Singular Value Decomposition
 I had moved away from trying different modeling methods to focus on improving GBMS.
-```{r SVD, eval=FALSE}
+```{r SVD, eval=FALSE, echo=FALSE}
 library(svd)
 
 trlan.eigen(studentgrades[,-(1:5)])
@@ -2006,7 +1984,7 @@ F_{m}(x) = F_{m-1}(x) + \nu h_m(x)
 ### Data Preperation
 To prepare the data fror gradient boosting, I did some cleaning to ensure the data used for training and testing would be available at the time of prediction for the student. For example, a student who wishes to predict their future STAT 230 grade wouldn't typically have 3rd or 4th year courses already completed. And definately wouldn't have grades for any courses with STAT 230 as a prereq.
 In this chunk we remove data which doesn't add to the training process. Immediately this is student ID, a students' 2nd major, and whether they're in honors (this could be included but isn't for now). After removing all students who don't have the pre requeset courses, columns (courses) are dropped if they are make up of too many NA values. In our case we want at least 20% of the data to be non-NA. This number was made arbitrarily to reduce the number of courses trained on. The best level of NA values used would be different depending on the course being predicted on. After that, we removed all courses from higher year levels as we wouldn't expect them to be taken.
-```{r GBM data prep COSC.221, eval=FALSE}
+```{r GBM data prep COSC.221, eval=FALSE, echo=FALSE}
 # Identifying the course of interest
 COI <- "COSC.221"
 coursegrades <- studentgrades_prof[!is.na(studentgrades_prof[,COI]),-c(1,3,5)]
@@ -2063,7 +2041,7 @@ head(coursegrades)
 ```
 
 This chunk is for initializing STAT 230 GBM code as this was the main course I was testing on. It prepares a data frame to be passed into the GBM model for training and testing. The first data frame used includes students' grades (without the new rows added) and professor data.
-```{r GBM data prep STAT230, eval=TRUE}
+```{r GBM data prep STAT230, eval=TRUE, echo=FALSE}
 # Identifying the course of interest
 COI <- "STAT.230"
 coursegrades <- studentgrades_prof[!is.na(studentgrades_prof[,COI]),-c(1,3,5)]
@@ -2107,7 +2085,7 @@ cols_to_keep <- c(student_columns, column_names[column_digits <= YOI])
 coursegrades <- coursegrades[, colnames(coursegrades) %in% cols_to_keep]
 
 # display data to be used
-head(coursegrades)
+kable(coursegrades[1:5, 1:10])
 ```
 
 
@@ -2115,8 +2093,7 @@ head(coursegrades)
 
 ### Analysis
 In this chunk we run the entire data set through a GBM which trains the data in its entirety (there is 10-fold cross validation). From there we can find the performance of the GBM using both cross validation and OOB to display the optimal number of iterations. We determine that with a learning rate of 0.001 there is no need for any more than 8000 iterations.
-```{r finding ideal number of GBM tree graphs to use, eval=FALSE}
-library(gbm)
+```{r finding ideal number of GBM tree graphs to use, eval=FALSE, echo=FALSE}
 
 gbm_params <- list(
   distribution = "gaussian",  # Specify the distribution for regression
@@ -2140,13 +2117,13 @@ print(gbm.perf(gbm_model, method="OOB"))
 ```
 
 The optimal number of iterations is used when training the model to ensure efficiency. CV folds is the only thing which hasn't been strenuously tested to find the optimal number of folds. Additionally, we print out the model summary, use the model to predict grades, and calculate the rmse of the predicted grades.
-```{r GBM model training, eval=TRUE, warning=FALSE}
+
+```{r GBM model training, eval=TRUE, warning=FALSE, echo=FALSE}
 set.seed(5934)
 n_rows <- nrow(coursegrades)
 train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
 test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
 
-library(gbm)
 
 gbm_params <- list(
   distribution = "gaussian",  # Specify the distribution for regression
@@ -2190,7 +2167,7 @@ all_model_rmse <- rbind(all_model_rmse, c(rmse, "Gradient Boosted Machine (on st
 
 #### GBM Comparisons
 The first one is a gradient boosted model performed on the new studentgrades data with professors included.
-```{r GBM on studentgrades_prof_new, eval=TRUE}
+```{r GBM on studentgrades_prof_new, eval=TRUE, echo=FALSE}
 # Identifying the course of interest
 COI <- "STAT.230"
 coursegrades <- studentgrades_prof_new[!is.na(studentgrades_prof_new[,COI]),-c(1,3,5)]
@@ -2240,14 +2217,13 @@ cols_to_keep <- c(student_columns, column_names[column_digits <= YOI])
 coursegrades <- coursegrades[, colnames(coursegrades) %in% cols_to_keep]
 
 # display data to be used
-head(coursegrades)
+kable(coursegrades[1:5,1:10])
 
 set.seed(5934)
 n_rows <- nrow(coursegrades)
 train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
 test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
 
-library(gbm)
 
 gbm_params <- list(
   distribution = "gaussian",  # Specify the distribution for regression
@@ -2277,7 +2253,7 @@ gbm_model <- gbm(STAT.230 ~ ., data = coursegrades[train_indices,], distribution
                  train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 5)
 
 # Print the summary of the trained model
-print(summary(gbm_model))
+# print(summary(gbm_model))
 
 # Make predictions on new data
 predictions <- predict(gbm_model, newdata = coursegrades[test_indices,], n.trees = ntrees)
@@ -2290,7 +2266,7 @@ all_model_rmse <- rbind(all_model_rmse, c(rmse, "Gradient Boosted Machine (on st
 ```
 
 This GBM model uses both original and new students' grades without the professor data.
-```{r GBM on studentgrades_new, eval=TRUE}
+```{r GBM on studentgrades_new, eval=TRUE, echo=FALSE}
 # Identifying the course of interest
 COI <- "STAT.230"
 coursegrades <- studentgrades_new[!is.na(studentgrades_new[,COI]),-c(1,3,5)]
@@ -2340,14 +2316,13 @@ cols_to_keep <- c(student_columns, column_names[column_digits <= YOI])
 coursegrades <- coursegrades[, colnames(coursegrades) %in% cols_to_keep]
 
 # display data to be used
-head(coursegrades)
+kable(coursegrades[1:5,1:10])
 
 set.seed(5934)
 n_rows <- nrow(coursegrades)
 train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
 test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
 
-library(gbm)
 
 gbm_params <- list(
   distribution = "gaussian",  # Specify the distribution for regression
@@ -2390,7 +2365,7 @@ all_model_rmse <- rbind(all_model_rmse, c(rmse, "Gradient Boosted Machine (on st
 ```
 
 The final GBM model uses the original studentgrades data set with no professors.
-```{r GBM on studentgrades, eval=TRUE}
+```{r GBM on studentgrades, eval=TRUE, echo=FALSE}
 # Identifying the course of interest
 COI <- "STAT.230"
 coursegrades <- studentgrades[!is.na(studentgrades[,COI]),-c(1,3,5)]
@@ -2437,14 +2412,13 @@ cols_to_keep <- c(student_columns, column_names[column_digits <= YOI])
 coursegrades <- coursegrades[, colnames(coursegrades) %in% cols_to_keep]
 
 # display data to be used
-head(coursegrades)
+kable(coursegrades[1:5,1:10])
 
 set.seed(5934)
 n_rows <- nrow(coursegrades)
 train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
 test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
 
-library(gbm)
 
 gbm_params <- list(
   distribution = "gaussian",  # Specify the distribution for regression
@@ -2474,7 +2448,7 @@ gbm_model <- gbm(STAT.230 ~ ., data = coursegrades[train_indices,], distribution
                  train.fraction = gbm_params$train.fraction, n.minobsinnode = gbm_params$n.minobsinnode, cv.folds = 5)
 
 # Print the summary of the trained model
-print(summary(gbm_model))
+# print(summary(gbm_model))
 
 # Make predictions on new data
 predictions <- predict(gbm_model, newdata = coursegrades[test_indices,], n.trees = ntrees)
@@ -2489,7 +2463,8 @@ all_model_rmse <- rbind(all_model_rmse, c(rmse, "Gradient Boosted Machine (on st
 
 ### Hyperparameter Training
 
-```{r GBM data prep many courses, eval=TRUE}
+Here we setup the GBM data for a few courses to find the best hyperparameters across many different courses.
+```{r GBM data prep many courses, eval=FALSE, echo=FALSE}
 # STAT 230
 COI <- "STAT.230"
 coursegrades <- studentgrades_prof[!is.na(studentgrades_prof[,COI]),-c(1,3,5)]
@@ -2533,7 +2508,7 @@ cols_to_keep <- c(student_columns, column_names[column_digits <= YOI])
 coursegrades <- coursegrades[, colnames(coursegrades) %in% cols_to_keep]
 
 # display data to be used
-coursegrades
+kable(coursegrades[1:5,1:10])
 
 
 # COSC 221
@@ -2768,9 +2743,7 @@ coursegrades.s303
 ```
 
 Here we used trainControl to perform a grid search on the hyperparameters of the GBM algorithm. The main parameters are: n.trees - The number of iterations (decision trees built). interaction.depth - The maximum depth of decision trees. shrinkage - Learning rate (lower rate means it learns less per iteration), if this is too small the model is prone to overfitting. n.minobsinnode - minimum number of observations in terminal nodes. From this we found out a shrinkage of 0.001 or 0.01 is best, a interaction depth of 3-4 is best, the number of trees doesn't matter as we find the optimal # anyways, and n.minobsinnode doesn't have a large impact. Also, train.fraction and bag.fraction of 0.5 are best to ensure some randomness in the model.
-```{r gridSearch on GBM, eval=FALSE}
-library(caret)
-library(tidyverse)
+```{r gridSearch on GBM, eval=FALSE, echo=FALSE}
 
 train_control = trainControl(method = "cv", number = 5, search = "grid")
 
@@ -2839,7 +2812,8 @@ stat303.model$results[order(stat303.model$results[,"RMSE"]),]
 
 ### Adding Error Bars
 This chunk adds error bars onto the graph of predicted vs actual grades. The error bars are calculated by taking the standard deviation of the absolute value of prediction grades - actual grades.
-```{r adding error bars, eval=TRUE}
+
+```{r adding error bars, eval=TRUE, echo=FALSE}
 ## calculating size of error bars
 errors <- abs(predictions - actual)
 error_bars <- sd(errors)
@@ -2860,9 +2834,9 @@ abline(0, 1, col = "red")
 ```
 
 This chunk follows another paper in adding quantile error bars. These are calculated using the "quantile" distribution as a parameter to the gbm. Both upper and lower bounds on the quantile range are found a plotted alongside predictions.
-```{r quantile gbm error bars, eval=TRUE}
+
+```{r quantile gbm error bars, eval=TRUE, echo=FALSE}
 ## training two more gbms using quantile ranges as the prediction interval
-library(gbm)
 
 gbm_params <- list(
   distribution = list(name = "quantile", alpha = 0.025),  # Specify the distribution for regression
@@ -2914,14 +2888,13 @@ arrows(actual, LB_predictions,
 abline(0, 1, col = "red")
 ```
 
-Our final way of calculating error bars is by bootstrapping the model 50 times and using the standard deviation to calculate the upper and lower bound for each grade predicted. 
-```{r bootstrap gbm error bars, eval=TRUE}
+Our final way of calculating error bars is by bootstrapping the model 50 times and using the standard deviation to calculate the upper and lower bound for each grade predicted.
+
+```{r bootstrap gbm error bars, eval=TRUE, echo=FALSE}
 # bootstrapping the model x times
 n_iterations = 50  # Number of bootstrapped models
 boot_preds = numeric(0)
 
-
-library(gbm)
 
 gbm_params <- list(
   distribution = "gaussian",  # Specify the distribution for regression
@@ -2986,14 +2959,13 @@ abline(0, 1, col = "red")
 
 ### Variable selection
 This variable selection technique was taken from a **paper** with some modifications to see if removing variables improves the model. After training the model on all predictors, the two given the least importance by the gbm algorithm are removed and the model is trained again until either 2 or 1 predictors remain. For the first few courses removed it performed alright, with a rmse of ~9.5. However, as we can see the rmse never got any better and slowly increased to 10.8. 
-```{r GBM recursive variable selection on prof data, eval=FALSE}
+```{r GBM recursive variable selection on prof data, eval=FALSE, echo=FALSE}
 
 set.seed(5934)
 n_rows <- nrow(coursegrades)
 train_indices <- sample(1:n_rows, 0.8 * n_rows)  # 80% of rows for training
 test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
 
-library(gbm)
 
 gbm_params <- list(
   distribution = "gaussian",  # Specify the distribution for regression
@@ -3101,16 +3073,17 @@ save(model_perf, file = "model_perf.RData")
 ```
 
 This table shows the models performance as the 'least relevant' courses are removed. Courses are rated to each other based on their relative influence on the model. We take the two courses listed as having the least relative influence and remove them from the next model run. This was repeated until no more courses remained. The table below shows the models test rmse. The two courses in each row were removed prior to training the model. The first row shows the performance with no columns removed. Note: this is additional variable selection performed after removing all columns with more than 80% NA values.
-```{r GBM rvs, eval=TRUE}
+```{r GBM rvs, eval=TRUE, echo=FALSE}
 load("model_perf.RData")
-model_perf
+plot(model_perf$RMSE)
 ```
 
+The output has been altered to show the RMSE of the model after two courses are consecutively removed from training/testing process.
 
 
 ## Extreme Gradient Boosting
 Both Gradient Boosting Machines and Extreme Gradient Boosting follow the sample principle of gradient boosting. However, xgboost was designed to use a more regularized model formalization to control over-fitting. While this gives it better performance, I had more luck coding GBMS. For xgboost the hyperparameter training had to be set up very differently and with new parameters such as lambda and alpha training took considerably longer. Additionally, GBMs were found to be easier to set up each time allowing for the course we predict on to be changed easily.
-```{r extreme gradient boosting, eval=FALSE}
+```{r extreme gradient boosting, eval=FALSE, echo=FALSE}
 library(xgboost)
 
 set.seed(5934)
@@ -3141,7 +3114,7 @@ rmse
 ```
 
 This is the hyperparameter gridsearch for the xgboost algorithm. This is the chunk that showed that a subsample and colsample_bytree of 0.5 were best (bag.fraction and train.fraction from gbm hyperparameters).
-```{r gridSearch on xGBM, eval=FALSE}
+```{r gridSearch on xGBM, eval=FALSE, echo=FALSE}
 library(caret)
 library(tidyverse)
 
@@ -3191,7 +3164,7 @@ xgb_hyperparams[order(xgb_hyperparams$rmse),]
 ```
 
 The only error bars which could be implemented are the bootstrapped model since xgboost doesn't support establishing the distribution of the boosting process like gbm.
-```{r adding bootstrapped xGBM error bars, eval=FALSE}
+```{r adding bootstrapped xGBM error bars, eval=FALSE, echo=FALSE}
 # bootstrapping the model x times 
 
 n_iterations = 100  # Number of bootstrapped models
@@ -3250,7 +3223,7 @@ abline(0, 1, col = "red")
 ## Main Plots Used
 ### Predicted grades vs Actual grades
 The main plot we used to show progress was plotting the predicted student grades against their actual grades. This graph immediately shows us if we're over or under predicting due to the red line. This line indicates "perfect prediction" as it follows where predicted grades = actual grades.
-```{r predicted grades vs actual grades, eval=TRUE}
+```{r predicted grades vs actual grades, eval=TRUE, echo=FALSE}
 actual <- coursegrades[test_indices,]$STAT.230
 plot(actual, predictions, xlab = "Actual Grades", ylab = "Predicted Grades", 
      main = "Predicted vs Actual Grades", pch = 16, col = "blue", xlim = c(0,100), ylim = c(0,100))
@@ -3265,7 +3238,7 @@ abline(line.lm, col = "green")
 
 ### Residuals
 This was added in for model checking to make sure there are no trend in residuals.
-```{r residuals, eval=TRUE}
+```{r residuals, eval=TRUE, echo=FALSE}
 residuals <- actual - predictions
 plot(predictions, residuals, xlab = "Predicted Grades", ylab = "Residuals", 
      main = "Residual Plot", pch = 16, col = "blue")
@@ -3277,7 +3250,7 @@ abline(line.lm, col = "green")
 
 ### Q-Q Plots
 A q-q plot was also added in for model checking.
-```{r qq plots, eval=TRUE}
+```{r qq plots, eval=TRUE, echo=FALSE}
 qqnorm(residuals, main = "Normal Q-Q Plot of Residuals")
 qqline(residuals, col = "red")
 ```
@@ -3285,9 +3258,7 @@ qqline(residuals, col = "red")
 ### Heatmap
 The heatmaps were added to view the data more categorically.
 This first chunk splits predictions and actual grades into intervals of 5 (eg. 50-54, 55-59...) and produces a heatmap of predicted vs actual grades.
-```{r conf matrix and heat map, eval=TRUE}
-library(ggplot2)
-library(caret)
+```{r conf matrix and heat map, eval=TRUE, echo=FALSE}
 
 # Define breaks for intervals of 5
 breaks <- seq(0, 100, by = 5)
@@ -3324,9 +3295,7 @@ ggplot(as.data.frame(confusion_matrix$table), aes(x = actual_fac, y = pred_fac, 
 ```
 
 The second chunk splits predictions and actual grades into their letter grades and produces a heatmap of predicted vs actual grades using those splits.
-```{r Heatmap on prediction letter grades, eval=TRUE}
-library(caret)
-library(ggplot2)
+```{r Heatmap on prediction letter grades, eval=TRUE, echo=FALSE}
 
 # Function to assign letter grades based on numeric ranges
 assign_grades <- function(scores) {
@@ -3366,7 +3335,7 @@ ggplot(as.data.frame(confusion_matrix$table), aes(x = actual_letter, y = predict
 
 # Model Comparison
 Here we plot the rmse of each model performed with a brief description. All models were trained to predict a student's STAT 230 grade. The same train and test sets were used, with the exception of models using new student data.
-```{r}
+```{r final model comparison, eval=TRUE, echo=FALSE}
 colnames(all_model_rmse) <- c("RMSE", "Model Details")
 
 
