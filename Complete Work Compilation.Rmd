@@ -111,9 +111,9 @@ head(df_clean)
 The student grades data has not fundamentally changed.
 ```{r loading cleaned student-data, eval=TRUE, echo=FALSE}
 load("student-data.RData")
-head(df_clean)
+kable(df_clean[c(1:5),c(1,3,4,5,13,18,19)])
 ```
-
+c(1,2,3,4,5,12,13,14,18)
 This chunks' main purpose is to make a table summing the number of times each course is taken. This also identifies the "Relevant Courses" as df_bsc_relevant_courses. Outputs the number of unique courses found after cleaning the data.
 ```{r finding number of times courses were taken, eval=TRUE, echo=FALSE}
 # Determining how many courses there are (taken by at least 1 student)
@@ -324,6 +324,8 @@ studentgrades[,c("Student_ID","MATH.101.1","MATH.101.2")]
 
 ```
 
+#### Loading studentgrades_rep
+
 ```{r loading studentgrades with .1 .2, eval=TRUE, echo=FALSE}
 load(file = "studentgrades_1.RData")
 kable(studentgrades_rep[c(1:5),c(1:5,810:815)])
@@ -361,12 +363,15 @@ studentgrades
 # save(studentgrades, file="StudentGrades.RData")
 ```
 
+#### Loading studentgrades_new
+
 ```{r loading studentgrades with new student data, eval=TRUE, echo=FALSE}
 load("StudentGrades.RData")
 studentgrades_new = studentgrades
 kable(studentgrades_new[c(1:5),c(1:10)])
 ```
 
+#### Loading studentgrades
 
 ```{r loading studentgrades using most recent grade, eval=TRUE, echo=FALSE}
 load("StudentGrades_old.RData")
@@ -640,16 +645,23 @@ for(i in (prof_column_adjust+6):ncol(studentgrades_prof)){
 save(studentgrades_prof, file="Prof_StudentGrades.RData")
 ```
 
+#### Loading studentgrades_prof_new
+
 ```{r loading studentgrades_prof using new student data, eval=TRUE, echo=FALSE}
 load(file="Prof_StudentGrades.RData")
 studentgrades_prof_new = studentgrades_prof
 kable(studentgrades_prof_new[1:5,1:12])
 ```
 
+#### Loading studentgrades_prof
+
+This is the original student grades with professor data. And what I will be using for the most part unless specified.
 ```{r loading studentgrades_prof, eval=TRUE, echo=FALSE}
 load(file="Prof_StudentGrades_old.RData")
-head(studentgrades_prof[,c(1:10,910:915)])
+kable(studentgrades_prof[1:5,c(1:7,910:912)])
 ```
+
+#### Loading Professor Course List
 
 Table of courses and the professors which taught them.
 ```{r showing prof list, eval=TRUE, echo=FALSE}
@@ -786,7 +798,7 @@ abline(mathstat2.lm)
 
 ## want to check on people who only had to take it once (aka no MATH.100.2 grade present)
 
-firsttimer <- anti_join(mathstat,mathstat2)
+firsttimer <- suppressMessages(anti_join(mathstat,mathstat2))
 first.lm <- lm(firsttimer$MATH.100.1~ firsttimer$STAT.230.1)
 summary(first.lm)
 
@@ -875,6 +887,17 @@ actual <- rel_grades[test_indices,"STAT.230"]
 
 rmse <- sqrt(mean((predictions - actual)^2))
 all_model_rmse <- rbind(all_model_rmse, c(rmse, "Linear Regression on Prerequisites"))
+
+
+plot(actual, predictions, xlab = "Actual Grades", ylab = "Predicted Grades", 
+     main = "Predicted vs Actual Grades", pch = 16, col = "blue", xlim = c(0,100), ylim = c(0,100))
+
+# this line represents 'perfect prediction' where actual grades = predicted grades
+abline(0, 1, col = "red")
+
+# creating and drawing line of best fit on the predicted data
+line.lm <- lm(predictions~actual)
+abline(line.lm, col = "green")
 ```
 
 
@@ -883,7 +906,8 @@ all_model_rmse <- rbind(all_model_rmse, c(rmse, "Linear Regression on Prerequisi
 These first attempts were made on either studentgrades_rep or studentgrades. Attempts made using studentgrades_prof were added in after for comparison.
 
 ### MissForest
-The MissForest package is used to impute missing data. After using it to impute NA's into student grades, we can use the imputed data set with other models which don't allow for missing data/NAs. One of this packages use cases was imputing the data and using it in a Random Forest model. Since imputation is computationally expensive, we only impute on a small number of courses. Unfortunately, due to the way in which I implemented this model into others there was some leaked information resulting in misleading rmse values. 
+The MissForest package is used to impute missing data. After using it to impute NA's into student grades, we can use the imputed data set with other models which don't allow for missing data/NAs. One of this packages use cases was imputing the data and using it in a Random Forest model. Since imputation is computationally expensive, we only impute on a small number of courses. 
+Unfortunately, due to the way in which I implemented this model into others there was some leaked information resulting in misleading rmse values. 
 This chunk uses studentgrades_rep and only uses each selected courses first attempt to impute and predict.
 ```{r missForest Impute into RF on course first attempts, eval=FALSE, warning=FALSE, echo=FALSE}
 # preparing all student grades with stat230
@@ -1139,10 +1163,14 @@ predictions <- stat230.pred
 actual <- stat230.real
 
 
+
 plot(actual, predictions, xlab = "Actual Grades", ylab = "Predicted Grades", 
      main = "Predicted vs Actual Grades", pch = 16, col = "blue", xlim = c(0,100), ylim = c(0,100))
+
+# this line represents 'perfect prediction' where actual grades = predicted grades
 abline(0, 1, col = "red")
 
+# creating and drawing line of best fit on the predicted data
 line.lm <- lm(predictions~actual)
 abline(line.lm, col = "green")
 
@@ -1175,6 +1203,19 @@ stat230.pred <- stat230.imputed[test_indices,]$STAT.230
 # MSE value to compare to other models
 rmse <- sqrt(mean((stat230.pred - stat230.real)^2))
 all_model_rmse <- rbind(all_model_rmse, c(rmse, "MissForest imputation as prediction (on studentgrades)"))
+
+predictions <- stat230.pred
+actual <- stat230.real
+
+plot(actual, predictions, xlab = "Actual Grades", ylab = "Predicted Grades", 
+     main = "Predicted vs Actual Grades", pch = 16, col = "blue", xlim = c(0,100), ylim = c(0,100))
+
+# this line represents 'perfect prediction' where actual grades = predicted grades
+abline(0, 1, col = "red")
+
+# creating and drawing line of best fit on the predicted data
+line.lm <- lm(predictions~actual)
+abline(line.lm, col = "green")
 ```
 
 
@@ -1202,6 +1243,18 @@ stat230.real <- stat230grades.full[test_indices,2:5]$STAT.230.1
 rmse <- sqrt(mean((stat230.pred - stat230.real)^2))
 all_model_rmse <- rbind(all_model_rmse, c(rmse, "Random Forest on non-NA data (studentgrades_rep)"))
 
+predictions <- stat230.pred
+actual <- stat230.real
+plot(actual, predictions, xlab = "Actual Grades", ylab = "Predicted Grades", 
+     main = "Predicted vs Actual Grades", pch = 16, col = "blue", xlim = c(0,100), ylim = c(0,100))
+
+# this line represents 'perfect prediction' where actual grades = predicted grades
+abline(0, 1, col = "red")
+
+# creating and drawing line of best fit on the predicted data
+line.lm <- lm(predictions~actual)
+abline(line.lm, col = "green")
+
 ## MSE of data without DATA101 is 175...
 ## looks like imputing data and running a randomforest is best so far
 ```
@@ -1224,11 +1277,24 @@ test_indices <- setdiff(1:n_rows, train_indices) # remaining rows for testing
 stat230.rf <- randomForest(STAT.230~., data=coursegrades[train_indices,] )
 stat230.pred <- predict(stat230.rf, newdata = coursegrades[test_indices,])
 
-
+predictions <- stat230.pred
+actual <- coursegrades[test_indices,]$STAT.230
 
 # MSE value to compare to other models
-rmse <- sqrt(mean((stat230.pred - stat230.real)^2))
+rmse <- sqrt(mean((stat230.pred - actual)^2))
 all_model_rmse <- rbind(all_model_rmse, c(rmse, "Random Forest on non-NA data (studentgrades)"))
+
+
+
+plot(actual, predictions, xlab = "Actual Grades", ylab = "Predicted Grades", 
+     main = "Predicted vs Actual Grades", pch = 16, col = "blue", xlim = c(0,100), ylim = c(0,100))
+
+# this line represents 'perfect prediction' where actual grades = predicted grades
+abline(0, 1, col = "red")
+
+# creating and drawing line of best fit on the predicted data
+line.lm <- lm(predictions~actual)
+abline(line.lm, col = "green")
 ```
 
 This chunk implements missForest and Random Forests to predict grades. However, only courses which have been taken a certain number of times (times_taken = 190) are used as predictors during imputation, training, and testing. This is a rudimentary variable selection method but ensures we use predictors with the most existing data. Leaks data unfortunately.
@@ -1379,6 +1445,18 @@ predictions <- predict(gbm_model, newdata = stat230grades[test_indices,2:5], n.t
 rmse <- sqrt(mean((predictions - stat230grades[test_indices,2:5]$STAT.230.1)^2))
 all_model_rmse <- rbind(all_model_rmse, c(rmse, "Gradient Boosted Machines using 4 coureses as predictors (on studentgrades_rep)"))
 ## 175 mse... getting worse...
+
+actual <- stat230grades[test_indices,2:5]$STAT.230.1
+
+plot(actual, predictions, xlab = "Actual Grades", ylab = "Predicted Grades", 
+     main = "Predicted vs Actual Grades", pch = 16, col = "blue", xlim = c(0,100), ylim = c(0,100))
+
+# this line represents 'perfect prediction' where actual grades = predicted grades
+abline(0, 1, col = "red")
+
+# creating and drawing line of best fit on the predicted data
+line.lm <- lm(predictions~actual)
+abline(line.lm, col = "green")
 ```
 
 This chunk uses the complete cases of COSC.221.1, MATH.101.1, STAT.230.1, and DATA.101.1 from studentgrades_rep to train and test. 
@@ -1420,9 +1498,22 @@ predictions <- predict(gbm_model, newdata = stat230grades[test_indices,2:5], n.t
 rmse <- sqrt(mean((predictions - stat230grades[test_indices,2:5]$STAT.230.1)^2))
 all_model_rmse <- rbind(all_model_rmse, c(rmse, "Gradient Boosted Machines on complete cases of 4 courses (on studentgrades_rep)"))
 ## 128 mse which is a little better when you've got full data
+
+
+actual <- stat230grades[test_indices,2:5]$STAT.230.1
+plot(actual, predictions, xlab = "Actual Grades", ylab = "Predicted Grades", 
+     main = "Predicted vs Actual Grades", pch = 16, col = "blue", xlim = c(0,100), ylim = c(0,100))
+
+# this line represents 'perfect prediction' where actual grades = predicted grades
+abline(0, 1, col = "red")
+
+# creating and drawing line of best fit on the predicted data
+line.lm <- lm(predictions~actual)
+abline(line.lm, col = "green")
 ```
 
 To cover all bases and check if it may be better, we impute grades onto the same courses and train a gbm model. The results are not great but quite a bit better than before.
+
 ```{r missForest impute into GBM on studentgrades_rep 4 courses, eval=TRUE, echo=FALSE}
 # now, does imputing the data before GBM work better?
 # preparing all student grades with stat230
@@ -1465,8 +1556,20 @@ predictions <- predict(gbm_model, newdata = stat230.imputed[test_indices,], n.tr
 # print(predictions)
 
 rmse <- sqrt(mean((predictions - stat230.imputed[test_indices,]$STAT.230.1)^2))
-all_model_rmse <- rbind(all_model_rmse, c(rmse, "MissForest imputation into Random Forest on 4 courses (studentgrades_rep)"))
+all_model_rmse <- rbind(all_model_rmse, c(rmse, "MissForest imputation into GBM on 4 courses (studentgrades_rep)"))
 ## 109 mse.. better still
+
+
+actual <- stat230.imputed[test_indices,]$STAT.230.1
+plot(actual, predictions, xlab = "Actual Grades", ylab = "Predicted Grades", 
+     main = "Predicted vs Actual Grades", pch = 16, col = "blue", xlim = c(0,100), ylim = c(0,100))
+
+# this line represents 'perfect prediction' where actual grades = predicted grades
+abline(0, 1, col = "red")
+
+# creating and drawing line of best fit on the predicted data
+line.lm <- lm(predictions~actual)
+abline(line.lm, col = "green")
 ```
 
 ```{r missForest impute into GBM on studentgrades 4 courses, eval=TRUE, echo=FALSE}
@@ -1511,7 +1614,19 @@ predictions <- predict(gbm_model, newdata = stat230.imputed[test_indices,], n.tr
 # print(predictions)
 
 rmse <- sqrt(mean((predictions - stat230.imputed[test_indices,]$STAT.230)^2))
-all_model_rmse <- rbind(all_model_rmse, c(rmse, "MissForest imputation into Random Forest on 4 courses (studentgrades)"))
+all_model_rmse <- rbind(all_model_rmse, c(rmse, "MissForest imputation into GBM on 4 courses (studentgrades)"))
+
+
+actual <- stat230.imputed[test_indices,]$STAT.230
+plot(actual, predictions, xlab = "Actual Grades", ylab = "Predicted Grades", 
+     main = "Predicted vs Actual Grades", pch = 16, col = "blue", xlim = c(0,100), ylim = c(0,100))
+
+# this line represents 'perfect prediction' where actual grades = predicted grades
+abline(0, 1, col = "red")
+
+# creating and drawing line of best fit on the predicted data
+line.lm <- lm(predictions~actual)
+abline(line.lm, col = "green")
 ```
 
 ```{r missForest impute into GBM on studentgrades all courses, eval=TRUE, echo=FALSE}
@@ -1598,7 +1713,20 @@ predictions <- predict(gbm_model, newdata = stat230.imputed[test_indices,], n.tr
 # print(predictions)
 
 rmse <- sqrt(mean((predictions - stat230.imputed[test_indices,]$STAT.230)^2))
-all_model_rmse <- rbind(all_model_rmse, c(rmse, "MissForest imputation into Random Forest on all courses (studentgrades)"))
+all_model_rmse <- rbind(all_model_rmse, c(rmse, "MissForest imputation into GBM on all courses (studentgrades)"))
+
+
+
+actual <- stat230.imputed[test_indices,]$STAT.230
+plot(actual, predictions, xlab = "Actual Grades", ylab = "Predicted Grades", 
+     main = "Predicted vs Actual Grades", pch = 16, col = "blue", xlim = c(0,100), ylim = c(0,100))
+
+# this line represents 'perfect prediction' where actual grades = predicted grades
+abline(0, 1, col = "red")
+
+# creating and drawing line of best fit on the predicted data
+line.lm <- lm(predictions~actual)
+abline(line.lm, col = "green")
 ```
 
 This chunk will use students grades of the current year (eg. second year uses STAT.230 and COSC.221) to train the GBM model. However, the test set will have grades from the current year removed (eg. won't use COSC.221 as a predictor). In hindsight this isn't a great idea when using GBMs as the decision trees used won't be configured for the subset of courses used. Also to note, this uses studentgrades_rep.
@@ -1761,6 +1889,18 @@ for(i in 1:nrow(predicted_grades)){
 
 rmse <- sqrt(mean((predicted_grades$grade - data_obj[test_indices,]$grade)^2))
 all_model_rmse <- rbind(all_model_rmse, c(rmse, "Matrix Factorization on the 199 courses taken the most times (studentgrades)"))
+
+predictions <- predicted_grades$grade
+actual <- data_obj[test_indices,]$grade
+plot(actual, predictions, xlab = "Actual Grades", ylab = "Predicted Grades", 
+     main = "Predicted vs Actual Grades", pch = 16, col = "blue", xlim = c(0,100), ylim = c(0,100))
+
+# this line represents 'perfect prediction' where actual grades = predicted grades
+abline(0, 1, col = "red")
+
+# creating and drawing line of best fit on the predicted data
+line.lm <- lm(predictions~actual)
+abline(line.lm, col = "green")
 ```
 
 ### Structured Learning
@@ -1872,6 +2012,18 @@ yPred <- predict(SVRFitCoarse$finalModel, xtest)
 
 rmse <- sqrt(mean((yPred - ytest)^2))
 all_model_rmse <- rbind(all_model_rmse, c(rmse, "MissForest impute into Support Vector Machines (on studentgrades)"))
+
+predictions <- yPred
+actual <- ytest
+plot(actual, predictions, xlab = "Actual Grades", ylab = "Predicted Grades", 
+     main = "Predicted vs Actual Grades", pch = 16, col = "blue", xlim = c(0,100), ylim = c(0,100))
+
+# this line represents 'perfect prediction' where actual grades = predicted grades
+abline(0, 1, col = "red")
+
+# creating and drawing line of best fit on the predicted data
+line.lm <- lm(predictions~actual)
+abline(line.lm, col = "green")
 ```
 
 ### Recursive Feature Elimination
@@ -2163,6 +2315,17 @@ actual <- coursegrades[test_indices,]$STAT.230
 
 rmse <- sqrt(mean((predictions - actual)^2))
 all_model_rmse <- rbind(all_model_rmse, c(rmse, "Gradient Boosted Machine (on studentgrades_prof)"))
+
+
+plot(actual, predictions, xlab = "Actual Grades", ylab = "Predicted Grades", 
+     main = "Predicted vs Actual Grades", pch = 16, col = "blue", xlim = c(0,100), ylim = c(0,100))
+
+# this line represents 'perfect prediction' where actual grades = predicted grades
+abline(0, 1, col = "red")
+
+# creating and drawing line of best fit on the predicted data
+line.lm <- lm(predictions~actual)
+abline(line.lm, col = "green")
 ```
 
 #### GBM Comparisons
@@ -2263,6 +2426,17 @@ actual <- coursegrades[test_indices,]$STAT.230
 
 rmse <- sqrt(mean((predictions - actual)^2))
 all_model_rmse <- rbind(all_model_rmse, c(rmse, "Gradient Boosted Machine (on studentgrades_prof_new)"))
+
+
+plot(actual, predictions, xlab = "Actual Grades", ylab = "Predicted Grades", 
+     main = "Predicted vs Actual Grades", pch = 16, col = "blue", xlim = c(0,100), ylim = c(0,100))
+
+# this line represents 'perfect prediction' where actual grades = predicted grades
+abline(0, 1, col = "red")
+
+# creating and drawing line of best fit on the predicted data
+line.lm <- lm(predictions~actual)
+abline(line.lm, col = "green")
 ```
 
 This GBM model uses both original and new students' grades without the professor data.
@@ -2362,6 +2536,17 @@ actual <- coursegrades[test_indices,]$STAT.230
 
 rmse <- sqrt(mean((predictions - actual)^2))
 all_model_rmse <- rbind(all_model_rmse, c(rmse, "Gradient Boosted Machine (on studentgrades_new)"))
+
+
+plot(actual, predictions, xlab = "Actual Grades", ylab = "Predicted Grades", 
+     main = "Predicted vs Actual Grades", pch = 16, col = "blue", xlim = c(0,100), ylim = c(0,100))
+
+# this line represents 'perfect prediction' where actual grades = predicted grades
+abline(0, 1, col = "red")
+
+# creating and drawing line of best fit on the predicted data
+line.lm <- lm(predictions~actual)
+abline(line.lm, col = "green")
 ```
 
 The final GBM model uses the original studentgrades data set with no professors.
@@ -2458,6 +2643,17 @@ actual <- coursegrades[test_indices,]$STAT.230
 
 rmse <- sqrt(mean((predictions - actual)^2))
 all_model_rmse <- rbind(all_model_rmse, c(rmse, "Gradient Boosted Machine (on studentgrades)"))
+
+
+plot(actual, predictions, xlab = "Actual Grades", ylab = "Predicted Grades", 
+     main = "Predicted vs Actual Grades", pch = 16, col = "blue", xlim = c(0,100), ylim = c(0,100))
+
+# this line represents 'perfect prediction' where actual grades = predicted grades
+abline(0, 1, col = "red")
+
+# creating and drawing line of best fit on the predicted data
+line.lm <- lm(predictions~actual)
+abline(line.lm, col = "green")
 ```
 
 
@@ -3341,7 +3537,41 @@ colnames(all_model_rmse) <- c("RMSE", "Model Details")
 
 plot(all_model_rmse$RMSE, ylim=c(6.5,15), ylab = "RMSE", xlab = "Model Index", main = "RMSE of Model")
 
-all_model_rmse
+all_model_rmse$`Model Details`[1] <- "[Linear Regression on Prerequisites](#initial-eda)"
+all_model_rmse$`Model Details`[2] <- "[MissForest imputation as prediction](#missforest) ([studentgrades](#loading-studentgrades))"
+all_model_rmse$`Model Details`[3] <- "[Random Forest on non-NA data](#random-forest) ([studentgrades_rep](#loading-studentgrades_rep))"
+all_model_rmse$`Model Details`[4] <- "[Random Forest on non-NA data (studentgrades)](#random-forest)"
+all_model_rmse$`Model Details`[5] <- "[Gradient Boosted Machines using 4 coureses as predictors (studentgrades_rep)](#gradient-boosted-machines)"
+all_model_rmse$`Model Details`[6] <- "[Gradient Boosted Machines on complete cases of 4 courses (studentgrades_rep)](#gradient-boosted-machines)"
+all_model_rmse$`Model Details`[7] <- "[MissForest imputation into GBM on 4 courses (studentgrades_rep)](#gradient-boosted-machines)"
+all_model_rmse$`Model Details`[8] <- "[MissForest imputation into GBM on 4 courses (studentgrades)](#gradient-boosted-machines)"
+all_model_rmse$`Model Details`[9] <- "[MissForest imputation into GBM on all courses (studentgrades)](#gradient-boosted-machines)"
+all_model_rmse$`Model Details`[10] <- "[Matrix Factorization on the 199 courses taken the most times (studentgrades)](#GBM Comparisons)"
+all_model_rmse$`Model Details`[11] <- "[MissForest impute into Support Vector Machines (on studentgrades)](#GBM Comparisons)"
+all_model_rmse$`Model Details`[12]<- "[Gradient Boosted Machine (on studentgrades_prof)](#GBM Comparisons)"
+all_model_rmse$`Model Details`[13] <- "[Gradient Boosted Machine (on studentgrades_prof_new)](#GBM Comparisons)"
+all_model_rmse$`Model Details`[14] <- "[Gradient Boosted Machine (on studentgrades_new)](#GBM Comparisons)"
+all_model_rmse$`Model Details`[15] <- "[Gradient Boosted Machine (on studentgrades)](#GBM Comparisons)"
+
+all_model_rmse$`Model Details`[1] <- "[Linear Regression on Prerequisites](#initial-eda)"
+all_model_rmse$`Model Details`[2] <- "[MissForest imputation as prediction](#missforest) ([studentgrades](#loading-studentgrades))"
+all_model_rmse$`Model Details`[3] <- "[Random Forest on non-NA data](#random-forest) ([studentgrades_rep](#loading-studentgrades_rep))"
+all_model_rmse$`Model Details`[4] <- "[Random Forest on non-NA data](#random-forest) ([studentgrades](#loading-studentgrades))"
+all_model_rmse$`Model Details`[5] <- "[Gradient Boosted Machines using 4 courses as predictors](#gradient-boosted-machines) ([studentgrades_rep](#loading-studentgrades_rep))"
+all_model_rmse$`Model Details`[6] <- "[Gradient Boosted Machines on complete cases of 4 courses](#gradient-boosted-machines) ([studentgrades_rep](#loading-studentgrades_rep))"
+all_model_rmse$`Model Details`[7] <- "[MissForest imputation into GBM on 4 courses](#gradient-boosted-machines) ([studentgrades_rep](#loading-studentgrades_rep))"
+all_model_rmse$`Model Details`[8] <- "[MissForest imputation into GBM on 4 courses](#gradient-boosted-machines) ([studentgrades](#loading-studentgrades))"
+all_model_rmse$`Model Details`[9] <- "[MissForest imputation into GBM on all courses](#gradient-boosted-machines) ([studentgrades](#loading-studentgrades))"
+all_model_rmse$`Model Details`[10] <- "[Matrix Factorization on the 199 courses taken the most times](#GBM Comparisons) ([studentgrades](#loading-studentgrades))"
+all_model_rmse$`Model Details`[11] <- "[MissForest impute into Support Vector Machines](#GBM Comparisons) ([studentgrades](#loading-studentgrades))"
+all_model_rmse$`Model Details`[12] <- "[Gradient Boosted Machine](#GBM Comparisons) ([studentgrades_prof](#loading-studentgrades_prof))"
+all_model_rmse$`Model Details`[13] <- "[Gradient Boosted Machine](#GBM Comparisons) ([studentgrades_prof_new](#loading-studentgrades_prof_new))"
+all_model_rmse$`Model Details`[14] <- "[Gradient Boosted Machine](#GBM Comparisons) ([studentgrades_new](#loading-studentgrades_new))"
+all_model_rmse$`Model Details`[15] <- "[Gradient Boosted Machine](#GBM Comparisons) ([studentgrades](#loading-studentgrades))"
+
+
+kable(all_model_rmse)
 ```
+
 
 
