@@ -37,7 +37,7 @@ The first thing we do is read in the student grades from the csv given. After th
 # df_clean <- df[,c(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18)]
 
 # loading new data
-load(file="new_merged_data.RData")
+load(file="rdata-files/new_merged_data.RData")
 
 df_clean <- final_data
 
@@ -105,12 +105,12 @@ head(df_clean)
 
 
 
-# save(df_clean, file = "student-data.RData")
+# save(df_clean, file = "rdata-files/student-data.RData")
 ```
 
 The student grades data has not fundamentally changed.
 ```{r loading cleaned student-data, eval=TRUE, echo=FALSE}
-load("student-data.RData")
+load("rdata-files/student-data.RData")
 kable(df_clean[c(1:5),c(1,3,4,5,13,18,19)])
 ```
 c(1,2,3,4,5,12,13,14,18)
@@ -327,7 +327,7 @@ studentgrades[,c("Student_ID","MATH.101.1","MATH.101.2")]
 #### Loading studentgrades_rep
 
 ```{r loading studentgrades with .1 .2, eval=TRUE, echo=FALSE}
-load(file = "studentgrades_1.RData")
+load(file = "rdata-files/studentgrades_1.RData")
 kable(studentgrades_rep[c(1:5),c(1:5,810:815)])
 ```
 
@@ -360,13 +360,13 @@ for (i in 1:nrow(df_bsc_relevant_courses)){
 }
 
 studentgrades
-# save(studentgrades, file="StudentGrades.RData")
+# save(studentgrades, file="rdata-files/StudentGrades.RData")
 ```
 
 #### Loading studentgrades_new
 
 ```{r loading studentgrades with new student data, eval=TRUE, echo=FALSE}
-load("StudentGrades.RData")
+load("rdata-files/StudentGrades.RData")
 studentgrades_new = studentgrades
 kable(studentgrades_new[c(1:5),c(1:10)])
 ```
@@ -374,7 +374,7 @@ kable(studentgrades_new[c(1:5),c(1:10)])
 #### Loading studentgrades
 
 ```{r loading studentgrades using most recent grade, eval=TRUE, echo=FALSE}
-load("StudentGrades_old.RData")
+load("rdata-files/StudentGrades_old.RData")
 kable(studentgrades[c(1:5),c(1:10)])
 ```
 
@@ -412,7 +412,7 @@ for(i in 1:length(file_names)){
 course_profs <- course_profs[course_profs$Section != "OVERALL",]
 course_profs <- course_profs[course_profs$Professor != "",]
 
-save(course_profs, file = "course_profs.RData")
+save(course_profs, file = "rdata-files/course_profs.RData")
 ```
 
 However, this data is messy and has several names in the professor column. My assumption is that TAs and co professors are added to the list along with the main professor. This chunk is used in the cleaning process and finds out how many times each unique professor name appears in the data frame.
@@ -474,14 +474,14 @@ for(r in 1:nrow(rel_course_profs)){
 }
 
 
-save(rel_course_profs, file = "cleaned_profs.RData")
+save(rel_course_profs, file = "rdata-files/cleaned_profs.RData")
 ```
 
 ```{r loading professor cleaning and final data, eval=TRUE, echo=FALSE}
 # course_profs
-load("course_profs.RData")
+load("rdata-files/course_profs.RData")
 # rel_course_profs
-load("cleaned_profs.RData")
+load("rdata-files/cleaned_profs.RData")
 ```
 
 The data frame rel_course_profs contains rows containing the Professor, Year, Course name, and Section for each course and section from 2018S to 2023S.
@@ -642,13 +642,13 @@ for(i in (prof_column_adjust+6):ncol(studentgrades_prof)){
   studentgrades_prof[,i] <- factor(studentgrades_prof[,i])
 }
 
-save(studentgrades_prof, file="Prof_StudentGrades.RData")
+save(studentgrades_prof, file="rdata-files/Prof_StudentGrades.RData")
 ```
 
 #### Loading studentgrades_prof_new
 
 ```{r loading studentgrades_prof using new student data, eval=TRUE, echo=FALSE}
-load(file="Prof_StudentGrades.RData")
+load(file="rdata-files/Prof_StudentGrades.RData")
 studentgrades_prof_new = studentgrades_prof
 kable(studentgrades_prof_new[1:5,1:12])
 ```
@@ -657,7 +657,7 @@ kable(studentgrades_prof_new[1:5,1:12])
 
 This is the original student grades with professor data. And what I will be using for the most part unless specified.
 ```{r loading studentgrades_prof, eval=TRUE, echo=FALSE}
-load(file="Prof_StudentGrades_old.RData")
+load(file="rdata-files/Prof_StudentGrades_old.RData")
 kable(studentgrades_prof[1:5,c(1:7,910:912)])
 ```
 
@@ -3086,7 +3086,7 @@ abline(0, 1, col = "red")
 
 Our final way of calculating error bars is by bootstrapping the model 50 times and using the standard deviation to calculate the upper and lower bound for each grade predicted.
 
-```{r bootstrap gbm error bars, eval=TRUE, echo=FALSE}
+```{r bootstrap gbm error bars, eval=TRUE, echo=FALSE, cache=TRUE}
 # bootstrapping the model x times
 n_iterations = 50  # Number of bootstrapped models
 boot_preds = numeric(0)
@@ -3265,12 +3265,12 @@ for(loop in 1:floor((ncol(coursegrades)-3)/2)){
   
 }
 
-save(model_perf, file = "model_perf.RData")
+save(model_perf, file = "rdata-files/model_perf.RData")
 ```
 
 This table shows the models performance as the 'least relevant' courses are removed. Courses are rated to each other based on their relative influence on the model. We take the two courses listed as having the least relative influence and remove them from the next model run. This was repeated until no more courses remained. The table below shows the models test rmse. The two courses in each row were removed prior to training the model. The first row shows the performance with no columns removed. Note: this is additional variable selection performed after removing all columns with more than 80% NA values.
 ```{r GBM rvs, eval=TRUE, echo=FALSE}
-load("model_perf.RData")
+load("rdata-files/model_perf.RData")
 plot(model_perf$RMSE)
 ```
 
@@ -3535,43 +3535,33 @@ Here we plot the rmse of each model performed with a brief description. All mode
 colnames(all_model_rmse) <- c("RMSE", "Model Details")
 
 
+
+
+all_model_rmse$'Model Details'[1] <- "[Linear Regression on Prerequisites](#initial-eda)"
+all_model_rmse$'Model Details'[2] <- "[MissForest imputation as prediction](#missforest) ([studentgrades](#loading-studentgrades))"
+all_model_rmse$'Model Details'[3] <- "[Random Forest on non-NA data](#random-forest) ([studentgrades_rep](#loading-studentgrades_rep))"
+all_model_rmse$'Model Details'[4] <- "[Random Forest on non-NA data](#random-forest) ([studentgrades](#loading-studentgrades))"
+all_model_rmse$'Model Details'[5] <- "[Gradient Boosted Machines using 4 courses as predictors](#gradient-boosted-machines) ([studentgrades_rep](#loading-studentgrades_rep))"
+all_model_rmse$'Model Details'[6] <- "[Gradient Boosted Machines on complete cases of 4 courses](#gradient-boosted-machines) ([studentgrades_rep](#loading-studentgrades_rep))"
+all_model_rmse$'Model Details'[7] <- "[MissForest imputation into GBM on 4 courses](#gradient-boosted-machines) ([studentgrades_rep](#loading-studentgrades_rep))"
+all_model_rmse$'Model Details'[8] <- "[MissForest imputation into GBM on 4 courses](#gradient-boosted-machines) ([studentgrades](#loading-studentgrades))"
+all_model_rmse$'Model Details'[9] <- "[MissForest imputation into GBM on all courses](#gradient-boosted-machines) ([studentgrades](#loading-studentgrades))"
+all_model_rmse$'Model Details'[10] <- "[Matrix Factorization on the 199 courses taken the most times](#GBM Comparisons) ([studentgrades](#loading-studentgrades))"
+all_model_rmse$'Model Details'[11] <- "[MissForest impute into Support Vector Machines](#GBM Comparisons) ([studentgrades](#loading-studentgrades))"
+all_model_rmse$'Model Details'[12] <- "[Gradient Boosted Machine](#GBM Comparisons) ([studentgrades_prof](#loading-studentgrades_prof))"
+all_model_rmse$'Model Details'[13] <- "[Gradient Boosted Machine](#GBM Comparisons) ([studentgrades_prof_new](#loading-studentgrades_prof_new))"
+all_model_rmse$'Model Details'[14] <- "[Gradient Boosted Machine](#GBM Comparisons) ([studentgrades_new](#loading-studentgrades_new))"
+all_model_rmse$'Model Details'[15] <- "[Gradient Boosted Machine](#GBM Comparisons) ([studentgrades](#loading-studentgrades))"
+
+# sorting all models into increasing rmse order
+all_model_rmse <- all_model_rmse[order(all_model_rmse$RMSE),]
+
 plot(all_model_rmse$RMSE, ylim=c(6.5,15), ylab = "RMSE", xlab = "Model Index", main = "RMSE of Model")
-
-all_model_rmse$`Model Details`[1] <- "[Linear Regression on Prerequisites](#initial-eda)"
-all_model_rmse$`Model Details`[2] <- "[MissForest imputation as prediction](#missforest) ([studentgrades](#loading-studentgrades))"
-all_model_rmse$`Model Details`[3] <- "[Random Forest on non-NA data](#random-forest) ([studentgrades_rep](#loading-studentgrades_rep))"
-all_model_rmse$`Model Details`[4] <- "[Random Forest on non-NA data (studentgrades)](#random-forest)"
-all_model_rmse$`Model Details`[5] <- "[Gradient Boosted Machines using 4 coureses as predictors (studentgrades_rep)](#gradient-boosted-machines)"
-all_model_rmse$`Model Details`[6] <- "[Gradient Boosted Machines on complete cases of 4 courses (studentgrades_rep)](#gradient-boosted-machines)"
-all_model_rmse$`Model Details`[7] <- "[MissForest imputation into GBM on 4 courses (studentgrades_rep)](#gradient-boosted-machines)"
-all_model_rmse$`Model Details`[8] <- "[MissForest imputation into GBM on 4 courses (studentgrades)](#gradient-boosted-machines)"
-all_model_rmse$`Model Details`[9] <- "[MissForest imputation into GBM on all courses (studentgrades)](#gradient-boosted-machines)"
-all_model_rmse$`Model Details`[10] <- "[Matrix Factorization on the 199 courses taken the most times (studentgrades)](#GBM Comparisons)"
-all_model_rmse$`Model Details`[11] <- "[MissForest impute into Support Vector Machines (on studentgrades)](#GBM Comparisons)"
-all_model_rmse$`Model Details`[12]<- "[Gradient Boosted Machine (on studentgrades_prof)](#GBM Comparisons)"
-all_model_rmse$`Model Details`[13] <- "[Gradient Boosted Machine (on studentgrades_prof_new)](#GBM Comparisons)"
-all_model_rmse$`Model Details`[14] <- "[Gradient Boosted Machine (on studentgrades_new)](#GBM Comparisons)"
-all_model_rmse$`Model Details`[15] <- "[Gradient Boosted Machine (on studentgrades)](#GBM Comparisons)"
-
-all_model_rmse$`Model Details`[1] <- "[Linear Regression on Prerequisites](#initial-eda)"
-all_model_rmse$`Model Details`[2] <- "[MissForest imputation as prediction](#missforest) ([studentgrades](#loading-studentgrades))"
-all_model_rmse$`Model Details`[3] <- "[Random Forest on non-NA data](#random-forest) ([studentgrades_rep](#loading-studentgrades_rep))"
-all_model_rmse$`Model Details`[4] <- "[Random Forest on non-NA data](#random-forest) ([studentgrades](#loading-studentgrades))"
-all_model_rmse$`Model Details`[5] <- "[Gradient Boosted Machines using 4 courses as predictors](#gradient-boosted-machines) ([studentgrades_rep](#loading-studentgrades_rep))"
-all_model_rmse$`Model Details`[6] <- "[Gradient Boosted Machines on complete cases of 4 courses](#gradient-boosted-machines) ([studentgrades_rep](#loading-studentgrades_rep))"
-all_model_rmse$`Model Details`[7] <- "[MissForest imputation into GBM on 4 courses](#gradient-boosted-machines) ([studentgrades_rep](#loading-studentgrades_rep))"
-all_model_rmse$`Model Details`[8] <- "[MissForest imputation into GBM on 4 courses](#gradient-boosted-machines) ([studentgrades](#loading-studentgrades))"
-all_model_rmse$`Model Details`[9] <- "[MissForest imputation into GBM on all courses](#gradient-boosted-machines) ([studentgrades](#loading-studentgrades))"
-all_model_rmse$`Model Details`[10] <- "[Matrix Factorization on the 199 courses taken the most times](#GBM Comparisons) ([studentgrades](#loading-studentgrades))"
-all_model_rmse$`Model Details`[11] <- "[MissForest impute into Support Vector Machines](#GBM Comparisons) ([studentgrades](#loading-studentgrades))"
-all_model_rmse$`Model Details`[12] <- "[Gradient Boosted Machine](#GBM Comparisons) ([studentgrades_prof](#loading-studentgrades_prof))"
-all_model_rmse$`Model Details`[13] <- "[Gradient Boosted Machine](#GBM Comparisons) ([studentgrades_prof_new](#loading-studentgrades_prof_new))"
-all_model_rmse$`Model Details`[14] <- "[Gradient Boosted Machine](#GBM Comparisons) ([studentgrades_new](#loading-studentgrades_new))"
-all_model_rmse$`Model Details`[15] <- "[Gradient Boosted Machine](#GBM Comparisons) ([studentgrades](#loading-studentgrades))"
-
 
 kable(all_model_rmse)
 ```
 
+Many of the earlier models proved to be ineffective for this problem containing mostly sparse data. There may be a way using neural networks to perform a time series analysis and prediction, but I didn't have enough time to fully test it. Models including MissForest (except one) use the final test grades to impute the missing predictor grades, so predictions done using this form of imputation leak information and shouldn't be used. 
 
+The best model I found was the gradient boosted machines which were able to handle spare data with ease. Most of the main analysis on these methods were done predicting STAT 230 as it had the most student grades to train/test on of all second year courses. For future improvements on GBMs, one could continue training hyperparameters on different courses or have a different setup for the training/testing data. Other than that I have pushed GBMs as much as they go. I wasn't able to find any models which could handle sparse data as well, but I do think a well designed neural network has lots of potential. I never saved my results from NN predictions, but I averaged 9-11 rmse across the different model structures.
 

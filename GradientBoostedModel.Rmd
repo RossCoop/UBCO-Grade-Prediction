@@ -7,7 +7,7 @@ output: html_document
 
 # Loading in Data
 ```{r}
-load(file="StudentGrades.RData")
+load(file="rdata-files/StudentGrades.RData")
 head(studentgrades)
 
 load(file="Prof_StudentGrades.RData")
